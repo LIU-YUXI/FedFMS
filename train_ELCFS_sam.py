@@ -37,6 +37,7 @@ parser.add_argument('--exp', type=str,  default='xxxx', help='model_name')
 parser.add_argument('--max_epoch', type=int,  default=100, help='maximum epoch number to train')
 parser.add_argument('--client_num', type=int, default=9, help='batch_size per gpu')
 parser.add_argument('--batch_size', type=int, default=10, help='batch_size per gpu')
+parser.add_argument('--image_size', type=int, default=1024, help='image_size')
 parser.add_argument('--clip_value', type=float,  default=100, help='maximum epoch number to train')
 parser.add_argument('--meta_step_size', type=float,  default=1e-3, help='maximum epoch number to train')
 parser.add_argument('--base_lr', type=float,  default=0.001, help='maximum epoch number to train')
@@ -231,7 +232,7 @@ if __name__ == "__main__":
                 # obtain training data
                 volume_batch, label_batch, disc_contour, disc_bg, cup_contour, cup_bg = sampled_batch['image'], sampled_batch['label'], \
                 sampled_batch['disc_contour'], sampled_batch['disc_bg'], sampled_batch['cup_contour'], sampled_batch['cup_bg']
-                volume_batch, pt, label_batch = generate_click_prompt(volume_batch, label_batch)
+        
                 # volume_batch_raw = volume_batch[:, :3, ...]
                 # volume_batch_trs_1 = volume_batch[:, 3:6, ...]
                 # volume_batch_trs_2 = volume_batch[:, 6:, ...]
@@ -239,21 +240,58 @@ if __name__ == "__main__":
                 #     volume_batch_raw.cuda(), volume_batch_trs_1.cuda(), volume_batch_trs_2.cuda(), label_batch.cuda()
                 volume_batch_raw_np = volume_batch[:, :3, ...]
                 volume_batch_trs_1_np = volume_batch[:, 3:6, ...]
+                #---
+                volume_batch_raw_np, pt, label_batch = generate_click_prompt(volume_batch_raw_np, label_batch)
+                point_labels = torch.ones(volume_batch.size(0))
+                if point_labels[0] != -1:
+                    # point_coords = samtrans.ResizeLongestSide(longsize).apply_coords(pt, (h, w))
+                    point_coords = pt
+                    coords_torch = torch.as_tensor(point_coords, dtype=torch.float, device=GPUdevice)
+                    labels_torch = torch.as_tensor(point_labels, dtype=torch.int, device=GPUdevice)
+                    coords_torch, labels_torch = coords_torch[None, :, :], labels_torch[None, :]
+                    pt = (coords_torch, labels_torch)
+                with torch.no_grad():
+                    # imge= net.image_encoder(imgs)
+                    se, de = net_current.prompt_encoder(
+                        points=pt,
+                        boxes=None,
+                        masks=None,
+                    )
                 volume_batch_raw, volume_batch_trs_1, label_batch = \
                     volume_batch_raw_np.cuda(), volume_batch_trs_1_np.cuda(), label_batch.cuda()
+                for n, value in net_current.image_encoder.named_parameters():
+                    if "Adapter" not in n:
+                        value.requires_grad = False
+                volume_batch_raw= net_current.image_encoder(volume_batch_raw)
+                outputs_soft_inner, _ = net_current.mask_decoder(
+                    image_embeddings=volume_batch_raw,
+                    image_pe=net.prompt_encoder.get_dense_pe(), #  1x(embed_dim)x(embedding_h)x(embedding_w)
+                    sparse_prompt_embeddings=se,
+                    dense_prompt_embeddings=de, 
+                    multimask_output=False,
+                )
+
                 disc_contour, disc_bg, cup_contour, cup_bg = disc_contour.cuda(), disc_bg.cuda(), cup_contour.cuda(), cup_bg.cuda()
 
                 # obtain updated parameter at inner loop
-                outputs_soft_inner, outputs_mask_inner, embedding_inner = net_current(volume_batch_raw)
+                # outputs_soft_inner, outputs_mask_inner, embedding_inner = net_current(volume_batch_raw)
                 loss_inner = dice_loss(outputs_soft_inner, label_batch)
                 grads = torch.autograd.grad(loss_inner, net_current.parameters(), retain_graph=True)
 
-                fast_weights = OrderedDict((name, param - torch.mul(meta_step_size, torch.clamp(grad, 0-clip_value, clip_value))) for
+                fast_weights_image_encoders = OrderedDict((name, param - torch.mul(meta_step_size, torch.clamp(grad, 0-clip_value, clip_value))) for
                                                   ((name, param), grad) in
                                                   zip(net_current.named_parameters(), grads))
-
+                # 好像有两个weights
+                volume_batch_trs_1= net_current.image_encoder(volume_batch_trs_1)
+                outputs_soft_outer_1, _ = net_current.mask_decoder(
+                    image_embeddings=volume_batch_raw,
+                    image_pe=net.prompt_encoder.get_dense_pe(), #  1x(embed_dim)x(embedding_h)x(embedding_w)
+                    sparse_prompt_embeddings=se,
+                    dense_prompt_embeddings=de, 
+                    multimask_output=False,
+                )
                 # outer loop evaluation
-                outputs_soft_outer_1, outputs_mask_outer_1, embedding_outer = net_current(volume_batch_trs_1, fast_weights) #alpha
+                # outputs_soft_outer_1, outputs_mask_outer_1, embedding_outer = net_current(volume_batch_trs_1, fast_weights) #alpha
                 loss_outer_1_dice = dice_loss(outputs_soft_outer_1, label_batch)
                 #print('contour',disc_contour, 'bg',disc_bg, 'contour',cup_contour, 'bg',cup_bg)
                 #print('embedding',embedding_inner)
