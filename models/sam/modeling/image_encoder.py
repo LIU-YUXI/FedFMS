@@ -118,7 +118,6 @@ class ImageEncoderViT(nn.Module):
             x = blk(x)
 
         x = self.neck(x.permute(0, 3, 1, 2))
-
         return x
 
 

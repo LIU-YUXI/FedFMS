@@ -31,7 +31,7 @@ from models.sam import SamPredictor, sam_model_registry
 from models.sam.utils.transforms import ResizeLongestSide
 from sam_utils import *
 # net = sam_model_registry['vit_b'](args,checkpoint=args.sam_ckpt).to(device)
-
+import copy
 parser = argparse.ArgumentParser()
 parser.add_argument('--exp', type=str,  default='xxxx', help='model_name')
 parser.add_argument('--max_epoch', type=int,  default=100, help='maximum epoch number to train')
@@ -163,7 +163,14 @@ def test(site_index, test_net):
     logging.info("OD dice_avg %.4f" % (dice_avg[0]))
     return dice_avg, dice_array, 0, [0,0]
 
-
+def copy_outer_net(fast_weights,net_current):
+    # 深拷贝net_current模型
+    net_copy = copy.deepcopy(net_current)
+    # 将fast_weights中的权重赋值给net_copy模型
+    for name, param in net_copy.named_parameters():
+        if name in fast_weights:
+            param.data = fast_weights[name]
+    return net_copy
 if __name__ == "__main__":
     ## make logger file
     if not os.path.exists(snapshot_path):
@@ -259,12 +266,14 @@ if __name__ == "__main__":
                     )
                 volume_batch_raw, volume_batch_trs_1, label_batch = \
                     volume_batch_raw_np.cuda(), volume_batch_trs_1_np.cuda(), label_batch.cuda()
+                print('parameters_name',net_current.image_encoder.named_parameters())
                 for n, value in net_current.image_encoder.named_parameters():
                     if "Adapter" not in n:
                         value.requires_grad = False
-                volume_batch_raw= net_current.image_encoder(volume_batch_raw)
+                # batch_size, out_chans=256, H', W', 感觉out_chans可以小一点
+                volume_batch_raw_encoded= net_current.image_encoder(volume_batch_raw)
                 outputs_soft_inner, _ = net_current.mask_decoder(
-                    image_embeddings=volume_batch_raw,
+                    image_embeddings=volume_batch_raw_encoded,
                     image_pe=net.prompt_encoder.get_dense_pe(), #  1x(embed_dim)x(embedding_h)x(embedding_w)
                     sparse_prompt_embeddings=se,
                     dense_prompt_embeddings=de, 
@@ -278,13 +287,24 @@ if __name__ == "__main__":
                 loss_inner = dice_loss(outputs_soft_inner, label_batch)
                 grads = torch.autograd.grad(loss_inner, net_current.parameters(), retain_graph=True)
 
-                fast_weights_image_encoders = OrderedDict((name, param - torch.mul(meta_step_size, torch.clamp(grad, 0-clip_value, clip_value))) for
+                fast_weights = OrderedDict((name, param - torch.mul(meta_step_size, torch.clamp(grad, 0-clip_value, clip_value))) for
                                                   ((name, param), grad) in
                                                   zip(net_current.named_parameters(), grads))
+                outer_net=copy_outer_net(fast_weights,net_current)
+                with torch.no_grad():
+                    # imge= net.image_encoder(imgs)
+                    se, de = outer_net.prompt_encoder(
+                        points=pt,
+                        boxes=None,
+                        masks=None,
+                    )
+                for n, value in outer_net.image_encoder.named_parameters():
+                    if "Adapter" not in n:
+                        value.requires_grad = False
                 # 好像有两个weights
-                volume_batch_trs_1= net_current.image_encoder(volume_batch_trs_1)
-                outputs_soft_outer_1, _ = net_current.mask_decoder(
-                    image_embeddings=volume_batch_raw,
+                volume_batch_trs_1_encoded= outer_net.image_encoder(volume_batch_trs_1)
+                outputs_soft_outer_1, _ = outer_net.mask_decoder(
+                    image_embeddings=volume_batch_trs_1_encoded,
                     image_pe=net.prompt_encoder.get_dense_pe(), #  1x(embed_dim)x(embedding_h)x(embedding_w)
                     sparse_prompt_embeddings=se,
                     dense_prompt_embeddings=de, 
@@ -296,9 +316,9 @@ if __name__ == "__main__":
                 #print('contour',disc_contour, 'bg',disc_bg, 'contour',cup_contour, 'bg',cup_bg)
                 #print('embedding',embedding_inner)
                 inner_disc_ct_em, inner_disc_bg_em, inner_cup_ct_em, inner_cup_bg_em = \
-                    extract_contour_embedding([disc_contour, disc_bg, cup_contour, cup_bg], embedding_inner)
+                    extract_contour_embedding([disc_contour, disc_bg, cup_contour, cup_bg], volume_batch_raw_encoded)
                 outer_disc_ct_em, outer_disc_bg_em, outer_cup_ct_em, outer_cup_bg_em = \
-                    extract_contour_embedding([disc_contour, disc_bg, cup_contour, cup_bg], embedding_outer)
+                    extract_contour_embedding([disc_contour, disc_bg, cup_contour, cup_bg], volume_batch_trs_1_encoded)
 
                 disc_ct_em = torch.cat((inner_disc_ct_em, outer_disc_ct_em), 0)
                 #print('inner_disc_ct_em',inner_disc_ct_em, ' outer_disc_ct_em',outer_disc_ct_em)
