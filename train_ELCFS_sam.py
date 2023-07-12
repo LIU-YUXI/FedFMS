@@ -55,8 +55,8 @@ import cfg
 args = cfg.parse_args()
 snapshot_path = "../output/" + args.exp + "/"
 
-os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
-batch_size = args.batch_size * len(args.gpu.split(','))
+os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)
+batch_size = args.batch_size * len(str(args.gpu).split(','))
 meta_step_size = args.meta_step_size
 clip_value = args.clip_value
 base_lr = args.base_lr
@@ -227,7 +227,7 @@ if __name__ == "__main__":
     lr_ = base_lr
     for epoch_num in tqdm(range(max_epoch), ncols=70):
         # update_global_model(net_clients, client_weight)
-        test(unseen_site_idx, net_clients[unseen_site_idx])
+        # test(unseen_site_idx, net_clients[unseen_site_idx])
         for client_idx in source_site_idx:
             dataloader_current = dataloader_clients[client_idx]
             net_current = net_clients[client_idx]
