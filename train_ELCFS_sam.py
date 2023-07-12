@@ -32,6 +32,7 @@ from models.sam.utils.transforms import ResizeLongestSide
 from sam_utils import *
 # net = sam_model_registry['vit_b'](args,checkpoint=args.sam_ckpt).to(device)
 import copy
+'''
 parser = argparse.ArgumentParser()
 parser.add_argument('--exp', type=str,  default='xxxx', help='model_name')
 parser.add_argument('--max_epoch', type=int,  default=100, help='maximum epoch number to train')
@@ -49,7 +50,9 @@ parser.add_argument('--unseen_site', type=int, default=8, help='batch_size per g
 parser.add_argument('--pretrain', type=str, default=None, help='pretrain model')
 parser.add_argument('--sam_ckpt', type=str, default=None, help='pretrain Sam model')
 args = parser.parse_args()
-
+'''
+import cfg
+args = cfg.parse_args()
 snapshot_path = "../output/" + args.exp + "/"
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu

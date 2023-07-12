@@ -96,7 +96,7 @@ from monai.data import (
 
 
 args = cfg.parse_args()
-device = torch.device('cuda', args.gpu_device)
+device = torch.device('cuda', args.gpu)
 
 '''preparation of domain loss'''
 # cnn = vgg19(pretrained=True).features.to(device).eval()
@@ -629,7 +629,7 @@ def cppn(args, size, img = None, seg = None, batch=None, num_output_channels=1, 
     return net.parameters(), outimg
 
 def get_siren(args):
-    wrapper = get_network(args, 'siren', use_gpu=args.gpu, gpu_device=torch.device('cuda', args.gpu_device), distribution = args.distributed)
+    wrapper = get_network(args, 'siren', use_gpu=args.gpu, gpu_device=torch.device('cuda', args.gpu), distribution = args.distributed)
     '''load init weights'''
     checkpoint = torch.load('./logs/siren_train_init_2022_08_19_21_00_16/Model/checkpoint_best.pth')
     wrapper.load_state_dict(checkpoint['state_dict'],strict=False)
@@ -637,7 +637,7 @@ def get_siren(args):
 
     '''load prompt'''
     checkpoint = torch.load('./logs/vae_standard_refuge1_2022_08_21_17_56_49/Model/checkpoint500')
-    vae = get_network(args, 'vae', use_gpu=args.gpu, gpu_device=torch.device('cuda', args.gpu_device), distribution = args.distributed)
+    vae = get_network(args, 'vae', use_gpu=args.gpu, gpu_device=torch.device('cuda', args.gpu), distribution = args.distributed)
     vae.load_state_dict(checkpoint['state_dict'],strict=False)
     '''end'''
 
@@ -777,8 +777,8 @@ def render_vis(
                     # dom_loss = err
                     one = torch.tensor(1, dtype=torch.float)
                     mone = one * -1
-                    one = one.cuda(args.gpu_device)
-                    mone = mone.cuda(args.gpu_device)
+                    one = one.cuda(args.gpu)
+                    mone = mone.cuda(args.gpu)
 
                     d_loss_real = netD(real)
                     d_loss_real = d_loss_real.mean()
