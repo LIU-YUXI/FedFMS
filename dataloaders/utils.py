@@ -7,6 +7,14 @@ from skimage import measure
 import scipy.ndimage as nd
 
 
+def random_click(mask, point_labels = 1, inout = 1):
+    indices = np.argwhere(mask == inout)
+    # print(indices)
+    if(indices.shape[0]==0):
+        return np.random.randint(0, mask.shape[-1], size=2)
+    else:
+        return indices[np.random.randint(len(indices))]
+
 def recursive_glob(rootdir='.', suffix=''):
     """Performs recursive glob with given suffix and rootdir
         :param rootdir is the root directory

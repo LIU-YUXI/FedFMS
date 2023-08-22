@@ -134,16 +134,18 @@ class Brain(object):
         channels = {'1':3, '4':3, '5':3, '6':3, '13':3, '16':3, '18':3, '20':3, '21':3}
         assert site in list(channels.keys())
         self.split = split
-
-        base_path = base_path if base_path is not None else'/CIS43/Medical_Images/FeTS2022/'
-        save_base_path = '/CIS43/Medical_Images/FeTS2022_FedDG/'
+        base_path = base_path if base_path is not None else'/mnt/diskB/lyx/FeTS2022'
+        save_base_path = '/mnt/diskB/lyx/FeTS2022_FedDG_1024/'
         sitedir = os.path.join(base_path, site)
         save_sitedir = os.path.join(save_base_path, site)
         imgsdir = os.path.join(sitedir, 'images')
         labelsdir = os.path.join(sitedir, 'labels')
         savesdir = os.path.join(save_sitedir, 'data_npy')
+        labelnpydir = os.path.join(save_sitedir, 'label_npy')
         if not os.path.exists(savesdir):
             os.makedirs(savesdir)
+        if not os.path.exists(labelnpydir):
+            os.makedirs(labelnpydir)
         freqsdir = os.path.join(save_sitedir, 'freq_amp_npy')
         if not os.path.exists(freqsdir):
             os.makedirs(freqsdir)
@@ -152,12 +154,13 @@ class Brain(object):
         # np.random.seed(2023)  # 先定义一个随机数种子
         lens = len(ossitedir)
         images, labels = [], []
-        save_path, freq_path = [], []
+        save_path, label_path, freq_path = [],[],[]
         for j,sample in enumerate(ossitedir):
             #if os.path.getsize(sampledir) < 1024 * 1024 and sampledir.endswith("_segmentation.nii.gz"):
             imgdir = os.path.join(imgsdir, sample)
             labeldir = os.path.join(labelsdir, sample)
             savedir = os.path.join(savesdir,sample)
+            savelabeldir = os.path.join(labelnpydir,sample)
             savefreqdir = os.path.join(freqsdir,sample)
             label_v = sitk.ReadImage(labeldir)
             image_v = sitk.ReadImage(imgdir)
@@ -181,6 +184,7 @@ class Brain(object):
                 labels.append(label)
                 images.append(image)
                 save_path.append(savedir+str(i)+'.npy')
+                label_path.append(savelabeldir+str(i)+'.npy')
                 freq_path.append(savefreqdir+str(i)+'.npy')
             #if(j>=100):
             #    break
@@ -190,28 +194,30 @@ class Brain(object):
         print(site, split, images.shape)
 
         self.images, self.labels = images, labels
-        self.savepathes,self.freqpathes = save_path, freq_path
+        self.savepathes,self.labelpathes,self.freqpathes = save_path,label_path, freq_path
         self.transform = transform
         self.channels = channels[site]
         self.labels = np.expand_dims(self.labels.astype(np.int64),axis=-1)
-        print('self.images[0], self.labels[0]',self.images[0].shape, self.labels[0].shape)
+        # print('self.images[0], self.labels[0]',self.images[0].shape, self.labels[0].shape)
+        print(self.savepathes[0],self.labelpathes[0],self.freqpathes[0])
     def __len__(self):
         return self.images.shape[0]
 
     def __getitem__(self, idx):
         image = self.images[idx]
         label = self.labels[idx]
-        image=cv2.resize(image, (384,384), interpolation=cv2.INTER_LINEAR)
-        label=cv2.resize(label, (384,384), interpolation=cv2.INTER_NEAREST)
+        image=cv2.resize(image, (1024,1024), interpolation=cv2.INTER_LINEAR)
+        label=cv2.resize(label, (256,256), interpolation=cv2.INTER_NEAREST)
         label = np.expand_dims(label.astype(np.int64),axis=-1)
         # print('image,label',image.shape,label.shape)
         # 先把图片+mask通道的存一下
-        save_image=np.concatenate((image,label),axis=-1)
-        np.save(self.savepathes[idx],save_image)
+        # save_image=np.concatenate((image,label),axis=-1)
+        np.save(self.savepathes[idx],image)
+        np.save(self.labelpathes[idx],label)
         # 存频率谱
-        amp=extract_amp_spectrum(image)
+        # amp=extract_amp_spectrum(image)
         # print('amp',amp.shape)
-        np.save(self.freqpathes[idx],amp)
+        # np.save(self.freqpathes[idx],amp)
         '''
         if self.transform is not None:
             if self.split == 'train':
@@ -275,6 +281,7 @@ class Brain(object):
             #    break
 sites = ['1', '4', '5', '6', '13', '16', '18', '20', '21']
 for site in sites:
+    print('begin ',site)
     trainset = Brain(site=site)
     trainset.preprocess()
     print('end',site)

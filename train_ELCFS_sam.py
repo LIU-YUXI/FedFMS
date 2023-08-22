@@ -1,4 +1,5 @@
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(map(str, [0,1,2,3,4,5,6,7])) # 一般在程序开头设置
 import sys
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
@@ -11,7 +12,7 @@ import numpy as np
 import collections
 from collections import OrderedDict
 from glob import glob
-
+import cv2
 import torch
 from torch.autograd import Variable
 import torch.optim as optim
@@ -54,9 +55,7 @@ args = parser.parse_args()
 import cfg
 args = cfg.parse_args()
 snapshot_path = "../output/" + args.exp + "/"
-
-os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)
-batch_size = args.batch_size * len(str(args.gpu).split(','))
+batch_size = args.batch_size * len(args.gpu.split(','))
 meta_step_size = args.meta_step_size
 clip_value = args.clip_value
 base_lr = args.base_lr
@@ -65,7 +64,7 @@ max_epoch = args.max_epoch
 display_freq = args.display_freq
 # ？？？
 client_name = ['1', '4', '5', '6', '13', '16', '18', '20', '21']
-data_path = '/CIS43/Medical_Images/FeTS2022_FedDG'
+data_path = '/mnt/diskB/lyx/FeTS2022_FedDG_1024'
 # 还要生成test数据
 client_data_list = []
 slice_num =[]
@@ -93,6 +92,19 @@ if args.deterministic:
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
+print(torch.__version__)
+print(torch.cuda.is_available())
+if torch.cuda.is_available():
+    # 获取可用的 CUDA 设备数量
+    num_devices = torch.cuda.device_count()
+    print(f"可用的 CUDA 设备数量: {num_devices}")
+
+    # 遍历输出每个设备的名称
+    for i in range(num_devices):
+        device_name = torch.cuda.get_device_name(i)
+        print(f"CUDA 设备 {i}: {device_name}")
+else:
+    print("没有可用的 CUDA 设备")
 # 一样的模型
 def update_global_model(net_clients, client_weight):
     # client_num=4
@@ -101,7 +113,7 @@ def update_global_model(net_clients, client_weight):
     #for param in zip(net_clients[0].parameters(), net_clients[1].parameters(), 
     #                 net_clients[2].parameters(), net_clients[3].parameters()):
         # print(param,param[0])
-        new_para = Variable(torch.Tensor(np.zeros(param[0].shape)), requires_grad=False).cuda() 
+        new_para = Variable(torch.Tensor(np.zeros(param[0].shape)), requires_grad=False).cuda(GPUdevice) 
         for i in range(client_num):
             new_para.data.add_(client_weight[i], param[i].data)
 
@@ -112,6 +124,7 @@ def extract_contour_embedding(contour_list, embeddings):
 
     average_embeddings_list = []
     for contour in contour_list:
+        # print('contour.shape,embeddings.shape',contour.shape,embeddings.shape)
         contour_embeddings = contour * embeddings
         average_embeddings = torch.sum(contour_embeddings, (-1,-2))/(torch.sum(contour, (-1,-2))+1e-8)
         # print (1,contour.shape)
@@ -126,7 +139,7 @@ def extract_contour_embedding(contour_list, embeddings):
         '''
         average_embeddings_list.append(average_embeddings)
     return average_embeddings_list
-
+'''
 def test(site_index, test_net):
 
     test_data_list = client_data_list[site_index]
@@ -141,8 +154,8 @@ def test(site_index, test_net):
         image = np.expand_dims(data[..., :3].transpose(2, 0, 1), axis=0)
         mask = np.expand_dims(data[..., 3:].transpose(2, 0, 1), axis=0)
         image = torch.from_numpy(image).float()
-
-        logit, pred, _ = test_net(image)
+        pt = random_click(np.array(mask) / 255, 1, 1)
+        logit, pred, _ = test_net.test(image,pt,multimask_output=False)
         pred_y = pred.cpu().detach().numpy()
         pred_y[pred_y>0.75] = 1
         pred_y[pred_y<0.75] = 0
@@ -165,7 +178,80 @@ def test(site_index, test_net):
     # logging.info("OD dice_avg %.4f OC dice_avg %.4f" % (dice_avg[0], dice_avg[1]))
     logging.info("OD dice_avg %.4f" % (dice_avg[0]))
     return dice_avg, dice_array, 0, [0,0]
+'''
+def test(site_index, test_net):
 
+    test_data_list = client_data_list[site_index]
+
+    dice_array = []
+    haus_array = []
+    # print(test_data_list)
+    test_net.eval()
+    for fid, filename in enumerate(test_data_list):
+        # print(fid)s
+        data = np.load(filename)
+        # print('data',data)
+        mask_data = np.load(filename.replace("data", "label"))
+        # why expand_dims?
+        image = np.expand_dims(data[..., :3].transpose(2, 0, 1), axis=0)
+        mask = np.expand_dims(mask_data.transpose(2, 0, 1), axis=0)
+        # print('mask_data.shape,mask.shape',mask_data.shape,mask.shape)
+        # mask在另外一个地方文件夹。。。
+        image = torch.from_numpy(image).float()
+        mask = torch.from_numpy(mask)
+        # print('dmi',mask)
+        mask_data=np.squeeze(mask_data)
+        mask_data=cv2.resize(mask_data,(image.shape[-1],image.shape[-1]),interpolation=cv2.INTER_NEAREST)
+        pt = np.expand_dims(random_click(np.array(mask_data), 1, 1), axis=0)
+        # print('pt',pt)
+        point_labels = torch.ones(image.size(0))
+        if point_labels[0] != -1:
+            # point_coords = samtrans.ResizeLongestSide(longsize).apply_coords(pt, (h, w))
+            point_coords = pt
+            coords_torch = torch.as_tensor(point_coords, dtype=torch.float, device=GPUdevice)
+            labels_torch = torch.as_tensor(point_labels, dtype=torch.int, device=GPUdevice)
+            coords_torch, labels_torch = coords_torch[None, :, :], labels_torch[None, :]
+            pt = (coords_torch, labels_torch)
+            # print('pt',pt[0].shape,pt[1].shape)
+            # imge= net.image_encoder(imgs)
+        se, de = test_net.prompt_encoder(
+            points=pt,
+            boxes=None,
+            masks=None
+        )
+        image,mask = image.cuda(GPUdevice), mask.cuda(GPUdevice)
+        image_encoded= test_net.image_encoder(image)
+        pred, _, _ = test_net.mask_decoder(
+            image_embeddings=image_encoded,
+            image_pe=test_net.prompt_encoder.get_dense_pe(), #  1x(embed_dim)x(embedding_h)x(embedding_w)
+            sparse_prompt_embeddings=se,
+            dense_prompt_embeddings=de, 
+            multimask_output=False,
+        )
+        # print('pred_y.shape',pred.shape)
+        # logit, pred, _ = test_net.test(image,pt,multimask_output=False)
+        pred_y = pred.cpu().detach().numpy()
+        pred_y[pred_y>0.75] = 1
+        pred_y[pred_y<0.75] = 0
+
+        pred_y_0 = pred_y[:, 0:1, ...]
+        # pred_y_1 = pred_y[:, 1:, ...]
+        processed_pred_y_0 = _connectivity_region_analysis(pred_y_0)
+        #processed_pred_y_1 = _connectivity_region_analysis(pred_y_1)
+        # processed_pred_y = np.concatenate([processed_pred_y_0, processed_pred_y_1], axis=1)
+        processed_pred_y=processed_pred_y_0
+        dice_subject = _eval_dice(mask.cpu().numpy(), processed_pred_y)
+        # haus_subject = _eval_haus(mask, processed_pred_y)
+        dice_array.append(dice_subject)
+        # haus_array.append(haus_subject)
+    dice_array = np.array(dice_array)
+    # print (dice_array.shape)
+    dice_avg = np.mean(dice_array, axis=0).tolist()
+    # print (dice_avg)
+    # haus_avg = np.mean(haus_array, axis=0).tolist()[0]
+    # logging.info("OD dice_avg %.4f OC dice_avg %.4f" % (dice_avg[0], dice_avg[1]))
+    logging.info("OD dice_avg %.4f" % (dice_avg[0]))
+    return dice_avg, dice_array, 0, [0,0]
 def copy_outer_net(fast_weights,net_current):
     # 深拷贝net_current模型
     net_copy = copy.deepcopy(net_current)
@@ -188,7 +274,7 @@ if __name__ == "__main__":
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     logging.info(str(args))
-
+    GPUdevice = torch.device('cuda', int(args.gpu))
 
     # define dataset, model, optimizer for each client
     def worker_init_fn(worker_id):
@@ -200,34 +286,36 @@ if __name__ == "__main__":
         freq_site_idx = source_site_idx.copy()
         if client_idx != unseen_site_idx:
             freq_site_idx.remove(client_idx)
-        dataset = Dataset(client_idx=client_idx, freq_site_idx=freq_site_idx,
+        dataset = Dataset(client_idx=client_idx, data_path=data_path,freq_site_idx=freq_site_idx,
                                 split='train', transform = transforms.Compose([
                                 ToTensor(),
                                 ]))
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True,  num_workers=1, pin_memory=True, worker_init_fn=worker_init_fn)
-        GPUdevice = torch.device('cuda', args.gpu)
         net = sam_model_registry['vit_b'](args,checkpoint=args.sam_ckpt).to(GPUdevice)# Unet2D(num_classes=1)
-        # net = net.cuda()
+        # net = net.cuda(GPUdevice)
+        '''
         if args.pretrain is not None:
             weights = torch.load(args.pretrain)
             net.load_state_dict(weights,strict=False)
+        '''
         optimizer = torch.optim.Adam(net.parameters(), lr=args.base_lr, betas=(0.9, 0.999))
         dataloader_clients.append(dataloader)
         net_clients.append(net)
         optimizer_clients.append(optimizer)
-
+    '''
     for name, param in  net_clients[0].named_parameters():
         print (name)
+    '''
 
     temperature = 0.05
     cont_loss_func = losses.NTXentLoss(temperature)
 
     # start federated learning
     writer = SummaryWriter(snapshot_path+'/log')
+    # print(test(unseen_site_idx, net_clients[unseen_site_idx]))
     lr_ = base_lr
     for epoch_num in tqdm(range(max_epoch), ncols=70):
         # update_global_model(net_clients, client_weight)
-        # test(unseen_site_idx, net_clients[unseen_site_idx])
         for client_idx in source_site_idx:
             dataloader_current = dataloader_clients[client_idx]
             net_current = net_clients[client_idx]
@@ -240,18 +328,21 @@ if __name__ == "__main__":
                 time2 = time.time()
 
                 # obtain training data
-                volume_batch, label_batch, disc_contour, disc_bg, cup_contour, cup_bg = sampled_batch['image'], sampled_batch['label'], \
-                sampled_batch['disc_contour'], sampled_batch['disc_bg'], sampled_batch['cup_contour'], sampled_batch['cup_bg']
-        
+                volume_batch, label_batch, disc_contour, disc_bg, cup_contour, cup_bg, pt = sampled_batch['image'], sampled_batch['label'], \
+                sampled_batch['disc_contour'], sampled_batch['disc_bg'], sampled_batch['cup_contour'], sampled_batch['cup_bg'], sampled_batch['pt']
+                # volume_batch=torch.unsqueeze(volume_batch,dim=-1)
+                # label_batch=torch.unsqueeze(label_batch,dim=-1)
+                # print(volume_batch.shape,label_batch.shape)
                 # volume_batch_raw = volume_batch[:, :3, ...]
                 # volume_batch_trs_1 = volume_batch[:, 3:6, ...]
                 # volume_batch_trs_2 = volume_batch[:, 6:, ...]
                 # volume_batch_raw, volume_batch_trs_1, volume_batch_trs_2, label_batch = \
-                #     volume_batch_raw.cuda(), volume_batch_trs_1.cuda(), volume_batch_trs_2.cuda(), label_batch.cuda()
+                #     volume_batch_raw.cuda(GPUdevice), volume_batch_trs_1.cuda(GPUdevice), volume_batch_trs_2.cuda(GPUdevice), label_batch.cuda(GPUdevice)
                 volume_batch_raw_np = volume_batch[:, :3, ...]
                 volume_batch_trs_1_np = volume_batch[:, 3:6, ...]
                 #---
-                volume_batch_raw_np, pt, label_batch = generate_click_prompt(volume_batch_raw_np, label_batch)
+                # volume_batch_raw_np, pt, label_batch = generate_click_prompt(volume_batch_raw_np, label_batch)
+                # print('pt0',pt.shape)
                 point_labels = torch.ones(volume_batch.size(0))
                 if point_labels[0] != -1:
                     # point_coords = samtrans.ResizeLongestSide(longsize).apply_coords(pt, (h, w))
@@ -260,39 +351,55 @@ if __name__ == "__main__":
                     labels_torch = torch.as_tensor(point_labels, dtype=torch.int, device=GPUdevice)
                     coords_torch, labels_torch = coords_torch[None, :, :], labels_torch[None, :]
                     pt = (coords_torch, labels_torch)
+                    # print('pt',pt[0].shape,pt[1].shape)
                 with torch.no_grad():
                     # imge= net.image_encoder(imgs)
                     se, de = net_current.prompt_encoder(
                         points=pt,
                         boxes=None,
-                        masks=None,
+                        masks=None
                     )
                 volume_batch_raw, volume_batch_trs_1, label_batch = \
-                    volume_batch_raw_np.cuda(), volume_batch_trs_1_np.cuda(), label_batch.cuda()
-                print('parameters_name',net_current.image_encoder.named_parameters())
+                    volume_batch_raw_np.cuda(GPUdevice), volume_batch_trs_1_np.cuda(GPUdevice), label_batch.cuda(GPUdevice)
+                # print('parameters_name',net_current.image_encoder.named_parameters())
+                parameters_to_calculate_grad = []
+                parameters_name_to_calculate_grad = []
                 for n, value in net_current.image_encoder.named_parameters():
                     if "Adapter" not in n:
                         value.requires_grad = False
                 # batch_size, out_chans=256, H', W', 感觉out_chans可以小一点
                 volume_batch_raw_encoded= net_current.image_encoder(volume_batch_raw)
-                outputs_soft_inner, _ = net_current.mask_decoder(
+                outputs_soft_inner, masks_inner_embedding, _ = net_current.mask_decoder(
                     image_embeddings=volume_batch_raw_encoded,
                     image_pe=net.prompt_encoder.get_dense_pe(), #  1x(embed_dim)x(embedding_h)x(embedding_w)
                     sparse_prompt_embeddings=se,
                     dense_prompt_embeddings=de, 
                     multimask_output=False,
                 )
-
-                disc_contour, disc_bg, cup_contour, cup_bg = disc_contour.cuda(), disc_bg.cuda(), cup_contour.cuda(), cup_bg.cuda()
-
+                # label_batch=torchvision.transforms.Resize((args.out_size,args.out_size))(label_batch)
+                disc_contour, disc_bg, cup_contour, cup_bg = disc_contour.cuda(GPUdevice), disc_bg.cuda(GPUdevice), cup_contour.cuda(GPUdevice), cup_bg.cuda(GPUdevice)
+                # torch.Size([2, 3, 1024, 1024]) torch.Size([2, 256, 64, 64]) torch.Size([2, 1, 256, 256]) torch.Size([2, 1, 1024, 1024])
+                # print('outputs_soft_inner, label_batch',volume_batch_raw_np.shape,volume_batch_raw_encoded.shape,outputs_soft_inner.shape, label_batch.shape)
                 # obtain updated parameter at inner loop
                 # outputs_soft_inner, outputs_mask_inner, embedding_inner = net_current(volume_batch_raw)
                 loss_inner = dice_loss(outputs_soft_inner, label_batch)
-                grads = torch.autograd.grad(loss_inner, net_current.parameters(), retain_graph=True)
-
+                for n, value in net_current.image_encoder.named_parameters():
+                    if "Adapter" in n:
+                        parameters_to_calculate_grad.append(value)
+                        parameters_name_to_calculate_grad.append((n,value))
+                grads = torch.autograd.grad(loss_inner, parameters_to_calculate_grad, retain_graph=True,allow_unused=True)
+                # print(grads)
+                new_parameters_name_to_calculate_grad,new_grads=[],[]
+                for index, value in enumerate(parameters_name_to_calculate_grad):
+                    n,v=value
+                    if(grads[index]==None):
+                        pass# print(n,grads[index])
+                    else:
+                        new_parameters_name_to_calculate_grad.append(value)
+                        new_grads.append(grads[index])
                 fast_weights = OrderedDict((name, param - torch.mul(meta_step_size, torch.clamp(grad, 0-clip_value, clip_value))) for
                                                   ((name, param), grad) in
-                                                  zip(net_current.named_parameters(), grads))
+                                                  zip(new_parameters_name_to_calculate_grad, new_grads))
                 outer_net=copy_outer_net(fast_weights,net_current)
                 with torch.no_grad():
                     # imge= net.image_encoder(imgs)
@@ -306,7 +413,7 @@ if __name__ == "__main__":
                         value.requires_grad = False
                 # 好像有两个weights
                 volume_batch_trs_1_encoded= outer_net.image_encoder(volume_batch_trs_1)
-                outputs_soft_outer_1, _ = outer_net.mask_decoder(
+                outputs_soft_outer_1,masks_outer_embedding, _ = outer_net.mask_decoder(
                     image_embeddings=volume_batch_trs_1_encoded,
                     image_pe=net.prompt_encoder.get_dense_pe(), #  1x(embed_dim)x(embedding_h)x(embedding_w)
                     sparse_prompt_embeddings=se,
@@ -319,9 +426,9 @@ if __name__ == "__main__":
                 #print('contour',disc_contour, 'bg',disc_bg, 'contour',cup_contour, 'bg',cup_bg)
                 #print('embedding',embedding_inner)
                 inner_disc_ct_em, inner_disc_bg_em, inner_cup_ct_em, inner_cup_bg_em = \
-                    extract_contour_embedding([disc_contour, disc_bg, cup_contour, cup_bg], volume_batch_raw_encoded)
+                    extract_contour_embedding([disc_contour, disc_bg, cup_contour, cup_bg], masks_inner_embedding)
                 outer_disc_ct_em, outer_disc_bg_em, outer_cup_ct_em, outer_cup_bg_em = \
-                    extract_contour_embedding([disc_contour, disc_bg, cup_contour, cup_bg], volume_batch_trs_1_encoded)
+                    extract_contour_embedding([disc_contour, disc_bg, cup_contour, cup_bg], masks_outer_embedding)
 
                 disc_ct_em = torch.cat((inner_disc_ct_em, outer_disc_ct_em), 0)
                 #print('inner_disc_ct_em',inner_disc_ct_em, ' outer_disc_ct_em',outer_disc_ct_em)
@@ -378,7 +485,6 @@ if __name__ == "__main__":
 
                     # image = np.array(cup_bg[0, 0:1, :, :].data.cpu().numpy())#, dtype='uint8')
                     # writer.add_image('train/cup_bg', image, iter_num)
-
 
         ## model aggregation
         update_global_model(net_clients, client_weight)

@@ -11,13 +11,13 @@ def parse_args():
     parser.add_argument('--base_lr', type=float,  default=0.001, help='maximum epoch number to train')
     parser.add_argument('--deterministic', type=int,  default=1, help='whether use deterministic training')
     parser.add_argument('--seed', type=int,  default=1337, help='random seed')
-    parser.add_argument('--gpu', type=int,  default='0', help='GPU to use')
+    parser.add_argument('--gpu', type=str,  default='0', help='GPU to use')
     parser.add_argument('--display_freq', type=int, default=5, help='batch_size per gpu')
     parser.add_argument('--unseen_site', type=int, default=8, help='batch_size per gpu')
     parser.add_argument('--pretrain', type=str, default=None, help='pretrain model')
+    parser.add_argument('--sam_ckpt', type=str, default=None, help='pretrain Sam model')
     parser.add_argument('--thd', type=bool, default=False , help='3d or not')
     parser.add_argument('--roi_size', type=int, default=96 , help='resolution of roi')
-    parser.add_argument('--sam_ckpt', type=str, default="/CIS43/lyx/Medical-SAM-Adapter-main/checkpoint/sam/sam_vit_b_01ec64.pth" , help='sam checkpoint address')
     args = parser.parse_args()
     return args
 '''

@@ -12,7 +12,8 @@ from typing import List, Tuple, Type
 
 from .common import LayerNorm2d
 
-
+# torch.Size([2, 256, 64, 64]) torch.Size([2, 1, 256, 256])
+# upscaling decide h and w
 class MaskDecoder(nn.Module):
     def __init__(
         self,
@@ -49,7 +50,7 @@ class MaskDecoder(nn.Module):
         self.iou_token = nn.Embedding(1, transformer_dim)
         self.num_mask_tokens = num_multimask_outputs + 1
         self.mask_tokens = nn.Embedding(self.num_mask_tokens, transformer_dim)
-
+        # out=[batch_size, transformer_dim // 8, height * 4, width * 4]
         self.output_upscaling = nn.Sequential(
             nn.ConvTranspose2d(transformer_dim, transformer_dim // 4, kernel_size=2, stride=2),
             LayerNorm2d(transformer_dim // 4),
@@ -91,23 +92,24 @@ class MaskDecoder(nn.Module):
           torch.Tensor: batched predicted masks
           torch.Tensor: batched predictions of mask quality
         """
-        masks, iou_pred = self.predict_masks(
+        masks_embedding, iou_pred = self.predict_masks(
             image_embeddings=image_embeddings,
             image_pe=image_pe,
             sparse_prompt_embeddings=sparse_prompt_embeddings,
             dense_prompt_embeddings=dense_prompt_embeddings,
         )
-
+        # masks.shape,iou_pred.shape torch.Size([1, 4, 256, 256]) torch.Size([1, 4])
+        # print('masks.shape,iou_pred.shape',masks.shape,iou_pred.shape)
         # Select the correct mask or masks for output
         if multimask_output:
             mask_slice = slice(1, None)
         else:
             mask_slice = slice(0, 1)
-        masks = masks[:, mask_slice, :, :]
+        masks = masks_embedding[:, mask_slice, :, :]
         iou_pred = iou_pred[:, mask_slice]
 
         # Prepare output
-        return masks, iou_pred
+        return masks, masks_embedding, iou_pred
 
     def predict_masks(
         self,
@@ -132,7 +134,7 @@ class MaskDecoder(nn.Module):
         # position embedding for the whole images
         pos_src = torch.repeat_interleave(image_pe, tokens.shape[0], dim=0)
         b, c, h, w = src.shape
-
+        # print('src',src.shape,b,c,h,w)
         # Run the transformer
         hs, src = self.transformer(src, pos_src, tokens)
         iou_token_out = hs[:, 0, :]
@@ -140,6 +142,7 @@ class MaskDecoder(nn.Module):
 
         # Upscale mask embeddings and predict masks using the mask tokens
         src = src.transpose(1, 2).view(b, c, h, w)
+        # [batch_size, transformer_dim // 8, height * 4, width * 4]
         upscaled_embedding = self.output_upscaling(src)
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):# 论文里是3层

@@ -96,7 +96,7 @@ from monai.data import (
 
 
 args = cfg.parse_args()
-device = torch.device('cuda', args.gpu)
+device = torch.device('cuda', int(args.gpu))
 
 '''preparation of domain loss'''
 # cnn = vgg19(pretrained=True).features.to(device).eval()
@@ -1129,43 +1129,46 @@ def calculate_gradient_penalty(netD, real_images, fake_images):
 
 
 def random_click(mask, point_labels = 1, inout = 1):
+    # print('\n mask',mask.shape)
     indices = np.argwhere(mask == inout)
-    return indices[np.random.randint(len(indices))]
+    # print('indices',indices.shape,indices)
+    if(indices.shape[0]==0):
+        return np.random.randint(0, mask.shape[-1], size=2)
+    else:
+        return indices[np.random.randint(len(indices))]
 
 
 def generate_click_prompt(img, msk, pt_label = 1):
     # return: prompt, prompt mask
-    pt_list = []
-    msk_list = []
-    b, c, h, w, d = msk.size()
-    msk = msk[:,0,:,:,:]
-    for i in range(d):
-        pt_list_s = []
-        msk_list_s = []
-        for j in range(b):
-            msk_s = msk[j,:,:,i]
-            # (h,w) ?
-            indices = torch.nonzero(msk_s)
-            if indices.size(0) == 0:
-                # generate a random array between [0-h, 0-h]:
-                random_index = torch.randint(0, h, (2,)).to(device = msk.device)
-                new_s = msk_s
-            else:
-                random_index = random.choice(indices)
-                label = msk_s[random_index[0], random_index[1]]
-                new_s = torch.zeros_like(msk_s)
-                # convert bool tensor to int
-                new_s = (msk_s == label).to(dtype = torch.float)
-                # new_s[msk_s == label] = 1
-            print('random_index.shape',random_index.shape)
-            pt_list_s.append(random_index)
-            msk_list_s.append(new_s)
-        pts = torch.stack(pt_list_s, dim=0)
-        msks = torch.stack(msk_list_s, dim=0)
-        pt_list.append(pts)
-        msk_list.append(msks)
-    pt = torch.stack(pt_list, dim=-1)
-    msk = torch.stack(msk_list, dim=-1)
+    # print('gens',msk.size())
+    b, c, h, w = msk.size()
+    msk = msk[:,0,:,:]
+    pt_list_s = []
+    msk_list_s = []
+    for j in range(b):
+        msk_s = msk[j,:,:]
+        # (h,w) ?
+        indices = torch.nonzero(msk_s)
+        if indices.size(0) == 0:
+            # generate a random array between [0-h, 0-h]:
+            random_index = torch.randint(0, h, (2,)).to(device = msk.device)
+            new_s = msk_s
+        else:
+            random_index = random.choice(indices)
+            label = msk_s[random_index[0], random_index[1]]
+            new_s = torch.zeros_like(msk_s)
+            # convert bool tensor to int
+            new_s = (msk_s == label).to(dtype = torch.float)
+            # new_s[msk_s == label] = 1
+        # print('random_index.shape',random_index.shape) torch.Size([2])
+        pt_list_s.append(random_index)
+        msk_list_s.append(new_s)
+    pts = torch.stack(pt_list_s, dim=0)
+    msks = torch.stack(msk_list_s, dim=0)
+        # pt_list.append(pts)
+        # msk_list.append(msks)
+    pt = pts# torch.stack(pt_list, dim=-1)
+    msk = msks# torch.stack(msk_list, dim=-1)
 
     msk = msk.unsqueeze(1)
 
