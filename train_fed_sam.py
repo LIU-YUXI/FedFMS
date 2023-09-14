@@ -68,6 +68,9 @@ data_path = '/mnt/diskB/lyx/FeTS2022_FedDG_1024'
 if args.data=='Prostate':
     client_name =  ['BIDMC', 'HK', 'I2CVB', 'ISBI', 'ISBI_1.5', 'UCL']
     data_path = '/mnt/diskB/lyx/Prostate_processed_1024'
+elif args.data=='Fundus':
+    client_name =  ['G1020', 'ORIGA', 'REFUGE','RIM-ONE','Drishti-GS1']
+    data_path = '/mnt/diskB/lyx/Fundus_1024'
 # 还要生成test数据
 client_num = len(client_name)
 client_data_list = []
@@ -187,51 +190,35 @@ def test(site_index, test_net):
     return dice_avg, dice_array, 0, [0,0]
 '''
 def val(site_index, test_net):
-
     val_data_list = client_val_data_list[site_index]
-    # print(val_data_list)
     dice_array = []
-    haus_array = []
     eiou_array = []
-    # print(test_data_list)
+    dice_array_cup = []
+    eiou_array_cup = []
     test_net.eval()
     for fid, filename in enumerate(val_data_list):
-        '''
-        if(os.path.isfile(filename)==False):
-            print(filename)
-            continue
-        '''
         data = np.load(filename)/ 255.0
-        # print('data',data)
         mask_data = np.load(filename.replace("data", "label"))
-        # why expand_dims?
         image = np.expand_dims(data[..., :3].transpose(2, 0, 1), axis=0)
         mask = np.expand_dims(mask_data.transpose(2, 0, 1), axis=0)
-        # print('mask_data.shape,mask.shape',mask_data.shape,mask.shape)
-        # mask在另外一个地方文件夹。。。
-        image = torch.from_numpy(image).float()
-        mask = torch.from_numpy(mask)
-        # print('dmi',mask)
-        mask_data=np.squeeze(mask_data)
+        image = torch.from_numpy(image).float().cuda(GPUdevice)
+        mask = torch.from_numpy(mask).cuda(GPUdevice)
+        mask_data=mask_data[:,:,0]# np.squeeze(mask_data)
         mask_data=cv2.resize(mask_data,(image.shape[-1],image.shape[-1]),interpolation=cv2.INTER_NEAREST)
         pt = np.expand_dims(random_click(np.array(mask_data), 1, 1), axis=0)
-        # print('pt',pt)
         point_labels = torch.ones(image.size(0))
         if point_labels[0] != -1:
-            # point_coords = samtrans.ResizeLongestSide(longsize).apply_coords(pt, (h, w))
             point_coords = pt
             coords_torch = torch.as_tensor(point_coords, dtype=torch.float, device=GPUdevice)
             labels_torch = torch.as_tensor(point_labels, dtype=torch.int, device=GPUdevice)
             coords_torch, labels_torch = coords_torch[None, :, :], labels_torch[None, :]
             pt = (coords_torch, labels_torch)
-            # print('pt',pt[0].shape,pt[1].shape)
-            # imge= net.image_encoder(imgs)
         se, de = test_net.prompt_encoder(
             points=pt,
             boxes=None,
             masks=None
         )
-        image,mask = image.cuda(GPUdevice), mask.cuda(GPUdevice)
+        # image,mask = image.cuda(GPUdevice), mask.cuda(GPUdevice)
         image_encoded= test_net.image_encoder(image)
         pred, _, _ = test_net.mask_decoder(
             image_embeddings=image_encoded,
@@ -241,62 +228,70 @@ def val(site_index, test_net):
             multimask_output=False,
         )
         threshold = (0.1, 0.3, 0.5, 0.7, 0.9)
-        
         temp = eval_seg(pred, mask, threshold)
-        # print(temp)
-        # mix_res = tuple([sum(a) for a in zip(mix_res, temp)])
-        
-        '''
-        # print('pred_y.shape',pred.shape)
-        # logit, pred, _ = test_net.test(image,pt,multimask_output=False)
-        pred_y = pred.cpu().detach().numpy()
-        pred_y[pred_y>0.75] = 1
-        pred_y[pred_y<0.75] = 0
-
-        pred_y_0 = pred_y[:, 0:1, ...]
-        # pred_y_1 = pred_y[:, 1:, ...]
-        processed_pred_y_0 = _connectivity_region_analysis(pred_y_0)
-        #processed_pred_y_1 = _connectivity_region_analysis(pred_y_1)
-        # processed_pred_y = np.concatenate([processed_pred_y_0, processed_pred_y_1], axis=1)
-        processed_pred_y=processed_pred_y_0
-        dice_subject = _eval_dice(mask.cpu().numpy(), processed_pred_y)
-        # haus_subject = _eval_haus(mask, processed_pred_y)
-        dice_array.append(dice_subject)
-        # haus_array.append(haus_subject)
-        '''
-        eiou, edice = temp
-        dice_array.append(edice)
-        eiou_array.append(eiou)
-        
-    dice_array = np.array(dice_array)
-    eiou_array = np.array(eiou_array)
-    # print (dice_array.shape)
-    dice_avg = np.mean(dice_array, axis=0).tolist()
-    eiou_avg = np.mean(eiou_array, axis=0).tolist()
-    # print (dice_avg)
-    # haus_avg = np.mean(haus_array, axis=0).tolist()[0]
-    # logging.info("OD dice_avg %.4f OC dice_avg %.4f" % (dice_avg[0], dice_avg[1]))
-    logging.info("validate data from client %d OD dice_avg %.4f, Eiou %.4f" % (site_index, dice_avg, eiou_avg))
-    return dice_avg,eiou_avg
+        if(pred.shape[1]==2):
+            iou_d, iou_c, disc_dice, cup_dice= temp
+            dice_array.append(disc_dice)
+            eiou_array.append(iou_d)
+            dice_array_cup.append(cup_dice)
+            eiou_array_cup.append(iou_c)
+        else:
+            eiou, edice = temp
+            dice_array.append(edice)
+            eiou_array.append(eiou)
+    if args.num_classes==2:
+        dice_array = np.array(dice_array)
+        eiou_array = np.array(eiou_array)
+        dice_array_cup = np.array(dice_array_cup)
+        eiou_array_cup = np.array(eiou_array_cup)
+        # print (dice_array.shape)
+        dice_avg = np.mean(dice_array, axis=0).tolist()
+        eiou_avg = np.mean(eiou_array, axis=0).tolist()
+        dice_avg_cup = np.mean(dice_array_cup, axis=0).tolist()
+        eiou_avg_cup = np.mean(eiou_array_cup, axis=0).tolist()
+        logging.info("validate data from client %d Disc Dice %.4f, Disc IOU %.4f, Cup Dice %.4f, Cup IOU %.4f" % (site_index, dice_avg, eiou_avg, dice_avg_cup, eiou_avg_cup))
+        return dice_avg,eiou_avg, dice_avg_cup, eiou_avg_cup
+    else:
+        dice_array = np.array(dice_array)
+        eiou_array = np.array(eiou_array)
+        # print (dice_array.shape)
+        dice_avg = np.mean(dice_array, axis=0).tolist()
+        eiou_avg = np.mean(eiou_array, axis=0).tolist()
+        logging.info("validate data from client %d OD dice_avg %.4f, Eiou %.4f" % (site_index, dice_avg, eiou_avg))
+        return dice_avg,eiou_avg
 
 def validation(test_net):
-    dice_avg, eiou_avg =[], []
+    dice_avg, eiou_avg, dice_avg_cup, eiou_avg_cup =[], [], [], []
     for i in source_site_idx:
-        dice_avg_one, eiou_avg_one=val(i,test_net)
-        dice_avg.append(dice_avg_one)
-        eiou_avg.append(eiou_avg_one)
+        if args.num_classes==2:
+            dice_avg_one, eiou_avg_one, dice_avg_cup_one, eiou_avg_cup_one=val(i,test_net)
+            dice_avg.append(dice_avg_one)
+            eiou_avg.append(eiou_avg_one)
+            dice_avg_cup.append(dice_avg_cup_one)
+            eiou_avg_cup.append(eiou_avg_cup_one)
+        else:
+            dice_avg_one, eiou_avg_one=val(i,test_net)
+            dice_avg.append(dice_avg_one)
+            eiou_avg.append(eiou_avg_one)
     dice_avg = np.mean(np.array(dice_avg), axis=0)
     eiou_avg = np.mean(np.array(eiou_avg), axis=0)
-    logging.info("Averagy validation: OD dice_avg %.4f, Eiou %.4f" % (dice_avg, eiou_avg))
-    return dice_avg, eiou_avg
+    if args.num_classes==2:
+        dice_avg_cup = np.mean(np.array(dice_avg_cup), axis=0)
+        eiou_avg_cup = np.mean(np.array(eiou_avg_cup), axis=0)
+        logging.info("Averagy validation: Disc Dice %.4f, Disc IOU %.4f, Cup Dice %.4f, Cup IOU %.4f" % (dice_avg, eiou_avg, dice_avg_cup, eiou_avg_cup))
+        return dice_avg, eiou_avg, dice_avg_cup, eiou_avg_cup
+    else:
+        logging.info("Averagy validation: OD dice_avg %.4f, Eiou %.4f" % (dice_avg, eiou_avg))
+        return dice_avg, eiou_avg
 
 def test(site_index, test_net):
 
     test_data_list = client_data_list[site_index]
 
     dice_array = []
-    haus_array = []
     eiou_array = []
+    dice_array_cup = []
+    eiou_array_cup = []
     # print(test_data_list)
     test_net.eval()
     ave_res, mix_res = (0,0,0,0), (0,0,0,0)
@@ -344,26 +339,6 @@ def test(site_index, test_net):
         threshold = (0.1, 0.3, 0.5, 0.7, 0.9)
         
         temp = eval_seg(pred, mask, threshold)
-        # print(temp)
-        # mix_res = tuple([sum(a) for a in zip(mix_res, temp)])
-        
-        '''
-        # print('pred_y.shape',pred.shape)
-        # logit, pred, _ = test_net.test(image,pt,multimask_output=False)
-        pred_y = pred.cpu().detach().numpy()
-        pred_y[pred_y>0.75] = 1
-        pred_y[pred_y<0.75] = 0
-
-        pred_y_0 = pred_y[:, 0:1, ...]
-        # pred_y_1 = pred_y[:, 1:, ...]
-        processed_pred_y_0 = _connectivity_region_analysis(pred_y_0)
-        #processed_pred_y_1 = _connectivity_region_analysis(pred_y_1)
-        # processed_pred_y = np.concatenate([processed_pred_y_0, processed_pred_y_1], axis=1)
-        processed_pred_y=processed_pred_y_0
-        dice_subject = _eval_dice(mask.cpu().numpy(), processed_pred_y)
-        # haus_subject = _eval_haus(mask, processed_pred_y)
-        dice_array.append(dice_subject)
-        # haus_array.append(haus_subject)
         '''
         eiou, edice = temp
         dice_array.append(edice)
@@ -379,6 +354,40 @@ def test(site_index, test_net):
     # logging.info("OD dice_avg %.4f OC dice_avg %.4f" % (dice_avg[0], dice_avg[1]))
     logging.info("OD dice_avg %.4f, Eiou %.4f" % (dice_avg, eiou_avg))
     return dice_avg, dice_array, eiou_avg, eiou_array
+        '''
+        if(pred.shape[1]==2):
+            iou_d, iou_c, disc_dice, cup_dice= temp
+            dice_array.append(disc_dice)
+            eiou_array.append(iou_d)
+            dice_array_cup.append(cup_dice)
+            eiou_array_cup.append(iou_c)
+        else:
+            eiou, edice = temp
+            dice_array.append(edice)
+            eiou_array.append(eiou)
+    if args.num_classes==2:
+        dice_array = np.array(dice_array)
+        eiou_array = np.array(eiou_array)
+        dice_array_cup = np.array(dice_array_cup)
+        eiou_array_cup = np.array(eiou_array_cup)
+        # print (dice_array.shape)
+        dice_avg = np.mean(dice_array, axis=0).tolist()
+        eiou_avg = np.mean(eiou_array, axis=0).tolist()
+        dice_avg_cup = np.mean(dice_array_cup, axis=0).tolist()
+        eiou_avg_cup = np.mean(eiou_array_cup, axis=0).tolist()
+        logging.info("Test Disc Dice %.4f, Disc IOU %.4f, Cup Dice %.4f, Cup IOU %.4f" % (dice_avg, eiou_avg, dice_avg_cup, eiou_avg_cup))
+        return dice_avg,eiou_avg, dice_avg_cup, eiou_avg_cup
+    else:
+        dice_array = np.array(dice_array)
+        eiou_array = np.array(eiou_array)
+        # print (dice_array.shape)
+        dice_avg = np.mean(dice_array, axis=0).tolist()
+        eiou_avg = np.mean(eiou_array, axis=0).tolist()
+        logging.info("Test OD dice_avg %.4f, Eiou %.4f" % (dice_avg, eiou_avg))
+        return dice_avg, eiou_avg
+
+
+
 def copy_outer_net(fast_weights,net_current):
     # 深拷贝net_current模型
     net_copy = copy.deepcopy(net_current)
@@ -421,12 +430,12 @@ if __name__ == "__main__":
             dataset = ProstateDataset(client_idx=client_idx, data_path=data_path,freq_site_idx=freq_site_idx,
                                 split='train', transform = transforms.Compose([
                                 ToTensor(),
-                                ]))
+                                ]),client_name=client_name)
         else:
             dataset = Dataset(client_idx=client_idx, data_path=data_path,freq_site_idx=freq_site_idx,
                                 split='train', transform = transforms.Compose([
                                 ToTensor(),
-                                ]))
+                                ]),client_name=client_name)
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True,  num_workers=1, pin_memory=True, worker_init_fn=worker_init_fn)
         net = sam_model_registry['vit_b'](args,checkpoint=args.sam_ckpt).to(GPUdevice)# Unet2D(num_classes=1)
         # net = nn.DataParallel(net, device_ids=device_list) 
@@ -454,6 +463,20 @@ if __name__ == "__main__":
     # dice, dice_array, haus, haus_array = test(unseen_site_idx, net_clients[unseen_site_idx])
     # print(("   OD dice is: {}, std is {}".format(dice, np.std(dice_array[:]))))
     lr_ = base_lr
+    with open(os.path.join(snapshot_path, 'evaluation_result.txt'), 'a') as f:
+        dice_list = []
+        haus_list = []
+        print("epoch {} testing , site {}".format(0, unseen_site_idx), file=f)
+        if args.num_classes==2:
+            # dice_avg, eiou_avg, dice_avg_cup, eiou_avg_cup=validation(net_clients[unseen_site_idx])
+            # print(("Validation OD dice is: {}, OD IOU is {}, OC dice is: {}, OC IOU is {}".format(dice_avg,eiou_avg, dice_avg_cup, eiou_avg_cup)),file=f)
+            dice_avg, eiou_avg, dice_avg_cup, eiou_avg_cup= test(unseen_site_idx, net_clients[unseen_site_idx])
+            print(("Test OD dice is: {}, OD IOU is {}, OC dice is: {}, OC IOU is {}".format(dice_avg,eiou_avg, dice_avg_cup, eiou_avg_cup)),file=f)
+        else:
+            # dice_avg, eiou_avg=validation(net_clients[unseen_site_idx])
+            # print(("Validation OD dice is: {}, IOU is {}".format(dice_avg,eiou_avg)),file=f)
+            dice_avg, eiou_avg= test(unseen_site_idx, net_clients[unseen_site_idx])
+            print(("Test OD dice is: {}, IOU is {}".format(dice_avg,eiou_avg)),file=f)
     for epoch_num in tqdm(range(max_epoch), ncols=70):
         # update_global_model(net_clients, client_weight)
         for client_idx in source_site_idx:
@@ -504,6 +527,7 @@ if __name__ == "__main__":
                     dense_prompt_embeddings=de, 
                     multimask_output=False,
                 )
+                # print("outputs_soft_inner.shape,label_batch.shape",outputs_soft_inner.shape,label_batch.shape)
                 loss_inner = lossfunc(outputs_soft_inner, label_batch) #dice
                 total_loss = loss_inner
 
@@ -553,7 +577,7 @@ if __name__ == "__main__":
                 if iter_num % 10000==0:
                     val(client_idx,net_current)
                     # break
-            validation(net_current)
+            # validation(net_current)
         ## model aggregation
         update_global_model(net_clients, client_weight)
 
@@ -562,10 +586,16 @@ if __name__ == "__main__":
             dice_list = []
             haus_list = []
             print("epoch {} testing , site {}".format(epoch_num, unseen_site_idx), file=f)
-            dice_avg, eiou_avg=validation(net_clients[unseen_site_idx])
-            print(("Validation OD dice is: {}, IOU is {}".format(dice_avg,eiou_avg)),file=f)
-            dice_avg, dice_array, eiou_avg, eiou_array = test(unseen_site_idx, net_clients[unseen_site_idx])
-            print(("Test OD dice is: {}, IOU is {}".format(dice_avg,eiou_avg)),file=f)
+            if args.num_classes==2:
+                dice_avg, eiou_avg, dice_avg_cup, eiou_avg_cup=validation(net_clients[unseen_site_idx])
+                print(("Validation OD dice is: {}, OD IOU is {}, OC dice is: {}, OC IOU is {}".format(dice_avg,eiou_avg, dice_avg_cup, eiou_avg_cup)),file=f)
+                dice_avg, eiou_avg, dice_avg_cup, eiou_avg_cup= test(unseen_site_idx, net_clients[unseen_site_idx])
+                print(("Test OD dice is: {}, OD IOU is {}, OC dice is: {}, OC IOU is {}".format(dice_avg,eiou_avg, dice_avg_cup, eiou_avg_cup)),file=f)
+            else:
+                dice_avg, eiou_avg=validation(net_clients[unseen_site_idx])
+                print(("Validation OD dice is: {}, IOU is {}".format(dice_avg,eiou_avg)),file=f)
+                dice_avg, eiou_avg= test(unseen_site_idx, net_clients[unseen_site_idx])
+                print(("Test OD dice is: {}, IOU is {}".format(dice_avg,eiou_avg)),file=f)
             # print(("   OC dice is: {}, std is {}".format(dice[1], np.std(dice_array[:, 1]))), file=f)
             
         ## save model

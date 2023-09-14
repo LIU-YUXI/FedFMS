@@ -13,12 +13,14 @@ from scipy.ndimage.morphology import distance_transform_edt, binary_erosion,\
     generate_binary_structure
 import cv2
 from PIL import Image
+# print("当前路径:", current_path)
+from sam_utils import random_click
 current_path = os.getcwd()
 class ProstateDataset(Dataset):
     """ LA Dataset """
-    def __init__(self,data_path=None, client_idx=None, freq_site_idx=None, split='train', transform=None):
+    def __init__(self,data_path=None, client_idx=None, freq_site_idx=None, split='train', transform=None, client_name=None):
         self.transform = transform
-        self.client_name = ['BIDMC', 'HK', 'I2CVB', 'ISBI', 'ISBI_1.5', 'UCL']
+        self.client_name = ['BIDMC', 'HK', 'I2CVB', 'ISBI', 'ISBI_1.5', 'UCL'] if client_name is None else client_name 
         self.freq_list_clients = []
         if split=='train':
             data_path = data_path if data_path is not None else '/mnt/diskB/lyx/Prostate_processed_1024'
@@ -48,8 +50,10 @@ class ProstateDataset(Dataset):
         mask_patch = np.load(label_path)
 
         mask =  np.squeeze(mask_patch)
+        # print(mask.shape)
         newsize = (image_patch.shape[1],image_patch.shape[1])
         # print(newsize)
+        # 只能(256,256)去resize,不能(256，256，1)
         mask=cv2.resize(mask, newsize, interpolation=cv2.INTER_NEAREST)
         # mask_patch = mask_patch.resize(newsize)
         # print('mask',mask_patch,mask_patch.size)
@@ -57,6 +61,7 @@ class ProstateDataset(Dataset):
         point_label = 1
         # print(list(np.array(mask)))
         pt = random_click(np.array(mask), point_label, inout)# np.expand_dims(random_click(np.array(mask), point_label, inout), axis=0)
+        # mask =  np.squeeze(mask_patch)
         # print('pt',pt)
         # print('raw_inp',raw_inp.shape,np.transpose(raw_inp,(2,0,1)).shape)
         # 将numpy数组转换为PIL图像
@@ -108,13 +113,11 @@ class ProstateDataset(Dataset):
         sample = {"image": image_patches.astype(np.float32)/ 255.0, "label": mask_patches.astype(np.float32), "pt":pt}
         
         return sample
-# print("当前路径:", current_path)
-from sam_utils import random_click
 class Dataset(Dataset):
     """ LA Dataset """
-    def __init__(self,data_path=None, client_idx=None, freq_site_idx=None, split='train', transform=None):
+    def __init__(self,data_path=None, client_idx=None, freq_site_idx=None, split='train', transform=None, client_name=None):
         self.transform = transform
-        self.client_name = ['1', '4', '5', '6', '13', '16', '18', '20', '21']
+        self.client_name = ['1', '4', '5', '6', '13', '16', '18', '20', '21'] if client_name is None else client_name 
         self.freq_list_clients = []
         if split=='train':
             data_path = data_path if data_path is not None else '/mnt/diskB/lyx/FeTS2022_FedDG_1024'
@@ -142,13 +145,18 @@ class Dataset(Dataset):
         file_name = os.path.basename(raw_file)
         label_path = os.path.join(self.label_dir,file_name)
         mask_patch = np.load(label_path)
-
-        mask =  np.squeeze(mask_patch)
+        
+        # mask =  np.squeeze(mask_patch)
+        # print(mask.shape)
         newsize = (image_patch.shape[1],image_patch.shape[1])
         # print(newsize)
+        # new_mask=[]
+        # for i in range(mask.shape[-1]):
+        #    new_mask.append(np.array(cv2.resize(mask, newsize, interpolation=cv2.INTER_NEAREST)))
+        mask = mask_patch[:,:,0]
         mask=cv2.resize(mask, newsize, interpolation=cv2.INTER_NEAREST)
         # mask_patch = mask_patch.resize(newsize)
-        # print('mask',mask_patch,mask_patch.size)
+        # print('mask',mask_patch.size)
         inout = 1
         point_label = 1
         # print(list(np.array(mask)))
