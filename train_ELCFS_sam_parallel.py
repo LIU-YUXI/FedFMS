@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(map(str, [0,1,2,3,4,5,6,7])) # 一般在程序开头设置
+# os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(map(str, [0,1,2,3,4,5,6,7])) # 一般在程序开头设置
 import sys
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
@@ -27,12 +27,17 @@ from networks.unet2d import Unet2D
 from utils.losses import dice_loss
 from utils.util import _eval_dice, _eval_haus, _connectivity_region_analysis, parse_fn_haus
 from dataloaders.fundus_dataloader import Dataset, ToTensor
-
+from torch.utils.data.distributed import DistributedSampler
 from models.sam import SamPredictor, sam_model_registry
 from models.sam.utils.transforms import ResizeLongestSide
 from sam_utils import *
 # net = sam_model_registry['vit_b'](args,checkpoint=args.sam_ckpt).to(device)
 import copy
+torch.distributed.init_process_group(backend="nccl")
+local_rank = int(os.environ['LOCAL_RANK'])
+torch.cuda.set_device(local_rank)
+device = torch.device("cuda", local_rank)
+import torch.distributed as dist
 '''
 parser = argparse.ArgumentParser()
 parser.add_argument('--exp', type=str,  default='xxxx', help='model_name')
@@ -54,7 +59,7 @@ args = parser.parse_args()
 '''
 import cfg
 args = cfg.parse_args()
-snapshot_path = "../output/" + args.exp + "/"
+snapshot_path = "../output2/" + args.exp + "/"
 batch_size = args.batch_size * len(args.gpu.split(','))
 meta_step_size = args.meta_step_size
 clip_value = args.clip_value
@@ -113,7 +118,7 @@ def update_global_model(net_clients, client_weight):
     #for param in zip(net_clients[0].parameters(), net_clients[1].parameters(), 
     #                 net_clients[2].parameters(), net_clients[3].parameters()):
         # print(param,param[0])
-        new_para = Variable(torch.Tensor(np.zeros(param[0].shape)), requires_grad=False).cuda(GPUdevice) 
+        new_para = Variable(torch.Tensor(np.zeros(param[0].shape)), requires_grad=False).cuda(local_rank) 
         for i in range(client_num):
             new_para.data.add_(client_weight[i], param[i].data)
 
@@ -210,8 +215,8 @@ def test(site_index, test_net):
         if point_labels[0] != -1:
             # point_coords = samtrans.ResizeLongestSide(longsize).apply_coords(pt, (h, w))
             point_coords = pt
-            coords_torch = torch.as_tensor(point_coords, dtype=torch.float, device=GPUdevice)
-            labels_torch = torch.as_tensor(point_labels, dtype=torch.int, device=GPUdevice)
+            coords_torch = torch.as_tensor(point_coords, dtype=torch.float, device=local_rank)
+            labels_torch = torch.as_tensor(point_labels, dtype=torch.int, device=local_rank)
             coords_torch, labels_torch = coords_torch[None, :, :], labels_torch[None, :]
             pt = (coords_torch, labels_torch)
             # print('pt',pt[0].shape,pt[1].shape)
@@ -221,7 +226,7 @@ def test(site_index, test_net):
             boxes=None,
             masks=None
         )
-        image,mask = image.cuda(GPUdevice), mask.cuda(GPUdevice)
+        image,mask = image.cuda(local_rank), mask.cuda(local_rank)
         image_encoded= test_net.image_encoder(image)
         pred, _, _ = test_net.mask_decoder(
             image_embeddings=image_encoded,
@@ -266,8 +271,121 @@ def test(site_index, test_net):
     # print (dice_avg)
     # haus_avg = np.mean(haus_array, axis=0).tolist()[0]
     # logging.info("OD dice_avg %.4f OC dice_avg %.4f" % (dice_avg[0], dice_avg[1]))
-    logging.info("OD dice_avg %.4f, Eiou %.4f" % (dice_avg, eiou_avg))
+    # logging.info("OD dice_avg %.4f, Eiou %.4f" % (dice_avg, eiou_avg))
     return dice_avg, dice_array, eiou_avg, eiou_array
+
+class FedModel(torch.nn.Module):
+    """Define a Federated learning model
+    
+    Attributes:
+    """
+    def __init__(self, net_current):
+        super(FedModel, self).__init__()
+        self.net_current = net_current
+        pos_weight = torch.ones([1])*2
+        criterion_G = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        self.lossfunc = criterion_G
+    @property
+    def device(self):
+        return self.net_current.device
+    def forward(self, volume_batch_raw, volume_batch_trs_1,disc_contour, disc_bg, cup_contour, cup_bg, pt):
+        point_labels = torch.ones(volume_batch_raw.size(0))
+        if point_labels[0] != -1:
+            # point_coords = samtrans.ResizeLongestSide(longsize).apply_coords(pt, (h, w))
+            point_coords = pt
+            coords_torch = torch.as_tensor(point_coords, dtype=torch.float, device=self.device)
+            labels_torch = torch.as_tensor(point_labels, dtype=torch.int, device=self.device)
+            coords_torch, labels_torch = coords_torch[None, :, :], labels_torch[None, :]
+            pt = (coords_torch, labels_torch)
+            # print('pt',pt[0].shape,pt[1].shape)
+        with torch.no_grad():
+            # imge= net.image_encoder(imgs)
+            se, de = self.net_current.prompt_encoder(
+                points=pt,
+                boxes=None,
+                masks=None
+            )
+        # print('parameters_name',net_current.image_encoder.named_parameters())
+        parameters_to_calculate_grad = []
+        parameters_name_to_calculate_grad = []
+        for n, value in self.net_current.image_encoder.named_parameters():
+            if "Adapter" not in n:
+                value.requires_grad = False
+        # batch_size, out_chans=256, H', W', 感觉out_chans可以小一点
+        volume_batch_raw_encoded= self.net_current.image_encoder(volume_batch_raw)
+        outputs_soft_inner, masks_inner_embedding, _ = self.net_current.mask_decoder(
+            image_embeddings=volume_batch_raw_encoded,
+            image_pe=net.prompt_encoder.get_dense_pe(), #  1x(embed_dim)x(embedding_h)x(embedding_w)
+            sparse_prompt_embeddings=se,
+            dense_prompt_embeddings=de, 
+            multimask_output=False,
+        )
+        loss_inner = self.lossfunc(outputs_soft_inner, label_batch)
+        for n, value in net_current.image_encoder.named_parameters():
+            if "Adapter" in n:
+                parameters_to_calculate_grad.append(value)
+                parameters_name_to_calculate_grad.append((n,value))
+        grads = torch.autograd.grad(loss_inner, parameters_to_calculate_grad, retain_graph=True,allow_unused=True)
+        # print(grads)
+        new_parameters_name_to_calculate_grad,new_grads=[],[]
+        for index, value in enumerate(parameters_name_to_calculate_grad):
+            n,v=value
+            if(grads[index]==None):
+                pass# print(n,grads[index])
+            else:
+                new_parameters_name_to_calculate_grad.append(value)
+                new_grads.append(grads[index])
+        fast_weights = OrderedDict((name, param - torch.mul(meta_step_size, torch.clamp(grad, 0-clip_value, clip_value))) for
+                                            ((name, param), grad) in
+                                            zip(new_parameters_name_to_calculate_grad, new_grads))
+        outer_net=copy_outer_net(fast_weights,net_current)
+        with torch.no_grad():
+            # imge= net.image_encoder(imgs)
+            se, de = outer_net.prompt_encoder(
+                points=pt,
+                boxes=None,
+                masks=None,
+            )
+        for n, value in outer_net.image_encoder.named_parameters():
+            if "Adapter" not in n:
+                value.requires_grad = False
+        # 好像有两个weights
+        volume_batch_trs_1_encoded= outer_net.image_encoder(volume_batch_trs_1)
+        outputs_soft_outer_1,masks_outer_embedding, _ = outer_net.mask_decoder(
+            image_embeddings=volume_batch_trs_1_encoded,
+            image_pe=net.prompt_encoder.get_dense_pe(), #  1x(embed_dim)x(embedding_h)x(embedding_w)
+            sparse_prompt_embeddings=se,
+            dense_prompt_embeddings=de, 
+            multimask_output=False,
+        )
+        # outer loop evaluation
+        # outputs_soft_outer_1, outputs_mask_outer_1, embedding_outer = net_current(volume_batch_trs_1, fast_weights) #alpha
+        loss_outer_1_dice = dice_loss(outputs_soft_outer_1, label_batch)
+        #print('contour',disc_contour, 'bg',disc_bg, 'contour',cup_contour, 'bg',cup_bg)
+        #print('embedding',embedding_inner)
+        inner_disc_ct_em, inner_disc_bg_em, inner_cup_ct_em, inner_cup_bg_em = \
+            extract_contour_embedding([disc_contour, disc_bg, cup_contour, cup_bg], masks_inner_embedding)
+        outer_disc_ct_em, outer_disc_bg_em, outer_cup_ct_em, outer_cup_bg_em = \
+            extract_contour_embedding([disc_contour, disc_bg, cup_contour, cup_bg], masks_outer_embedding)
+
+        disc_ct_em = torch.cat((inner_disc_ct_em, outer_disc_ct_em), 0)
+        #print('inner_disc_ct_em',inner_disc_ct_em, ' outer_disc_ct_em',outer_disc_ct_em)
+        disc_bg_em = torch.cat((inner_disc_bg_em, outer_disc_bg_em), 0)
+        # cup_ct_em = torch.cat((inner_cup_ct_em, outer_cup_ct_em), 0)
+        # cup_bg_em = torch.cat((inner_cup_bg_em, outer_cup_bg_em), 0)
+        disc_em = torch.cat((disc_ct_em, disc_bg_em), 0)
+        # print(disc_em)
+        # cup_em = torch.cat((cup_ct_em, cup_bg_em), 0)
+        label = np.concatenate([np.ones(disc_ct_em.shape[0]), np.zeros(disc_bg_em.shape[0])])
+        label = torch.from_numpy(label)
+        # none可能是因为除的embedding是0了。。。
+        disc_cont_loss = cont_loss_func(disc_em, label)
+        # cup_cont_loss = cont_loss_func(cup_em, label)
+        cont_loss = disc_cont_loss # + cup_cont_loss
+        loss_outer = loss_outer_1_dice + cont_loss * 0.1
+        total_loss = 100 * loss_inner  + loss_outer 
+        return loss_inner, loss_outer_1_dice, cont_loss, loss_outer, total_loss
+
 def copy_outer_net(fast_weights,net_current):
     # 深拷贝net_current模型
     net_copy = copy.deepcopy(net_current)
@@ -283,25 +401,23 @@ if __name__ == "__main__":
         os.makedirs(snapshot_path)
     if not os.path.exists(snapshot_path + '/model'):
         os.makedirs(snapshot_path + '/model')
-    if os.path.exists(snapshot_path + '/code'):
-        shutil.rmtree(snapshot_path + '/code')
-    shutil.copytree('.', snapshot_path + '/code', shutil.ignore_patterns(['.git','__pycache__']))
+    # if os.path.exists(snapshot_path + '/code'):
+    #    shutil.rmtree(snapshot_path + '/code')
+    # shutil.copytree('.', snapshot_path + '/code', shutil.ignore_patterns(['.git','__pycache__']))
 
     logging.basicConfig(filename=snapshot_path+"/log.txt", level=logging.INFO,
                         format='[%(asctime)s.%(msecs)03d] %(message)s', datefmt='%H:%M:%S')
     logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
     logging.info(str(args))
-    GPUdevice = torch.device('cuda', int(args.gpu))
-    pos_weight = torch.ones([1]).cuda(device=GPUdevice)*2
-    criterion_G = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-    lossfunc = criterion_G
+    device_list = [0, 1]
+    GPUdevice = torch.device('cuda', device_list[0])
     # define dataset, model, optimizer for each client
     def worker_init_fn(worker_id):
         random.seed(args.seed+worker_id)
     dataloader_clients = []
     net_clients = []
+    fedmodel_clients = []
     optimizer_clients = []
-    device_list = [6, 7]
     for client_idx in range(client_num):
         freq_site_idx = source_site_idx.copy()
         if client_idx != unseen_site_idx:
@@ -310,8 +426,8 @@ if __name__ == "__main__":
                                 split='train', transform = transforms.Compose([
                                 ToTensor(),
                                 ]))
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True,  num_workers=1, pin_memory=True, worker_init_fn=worker_init_fn)
-        net = sam_model_registry['vit_b'](args,checkpoint=args.sam_ckpt).to(GPUdevice)# Unet2D(num_classes=1)
+        dataloader = DataLoader(dataset, batch_size=batch_size, sampler=DistributedSampler(dataset, shuffle=True), num_workers=2, drop_last=True)#, num_workers=1, pin_memory=True, worker_init_fn=worker_init_fn
+        net = sam_model_registry['vit_b'](args,checkpoint=args.sam_ckpt)# .to(GPUdevice)# Unet2D(num_classes=1)
         # net = nn.DataParallel(net, device_ids=device_list) 
         # net = net.cuda()
         # net = net.cuda(GPUdevice)
@@ -320,9 +436,21 @@ if __name__ == "__main__":
             weights = torch.load(args.pretrain)
             net.load_state_dict(weights,strict=False)
         '''
-        optimizer = torch.optim.Adam(net.parameters(), lr=args.base_lr, betas=(0.9, 0.999))
+        # optimizer = torch.optim.Adam(model.parameters())
+        # optimizer = torch.optim.Adam(net.parameters(), lr=args.base_lr, betas=(0.9, 0.999))
         dataloader_clients.append(dataloader)
         net_clients.append(net)
+        fed_model = FedModel(net)
+        fed_model.to(local_rank)
+        for ps in fed_model.parameters():
+            dist.broadcast(ps, 0)
+        # fed_model = nn.DataParallel(fed_model, device_ids=device_list) 
+        # fed_model = fed_model.cuda(device_list[0])
+        fed_model = torch.nn.parallel.DistributedDataParallel(fed_model,
+                                                    device_ids=[local_rank],broadcast_buffers=False,
+                                                    output_device=local_rank, find_unused_parameters=True)
+        optimizer = torch.optim.Adam(net.parameters(), lr=args.base_lr, betas=(0.9, 0.999))
+        fedmodel_clients.append(fed_model)
         optimizer_clients.append(optimizer)
     '''
     for name, param in  net_clients[0].named_parameters():
@@ -333,7 +461,7 @@ if __name__ == "__main__":
     cont_loss_func = losses.NTXentLoss(temperature)
 
     # start federated learning
-    writer = SummaryWriter(snapshot_path+'/log')
+    writer = SummaryWriter(snapshot_path+'/log', filename_suffix='.{timestamp}')
     # dice, dice_array, haus, haus_array = test(unseen_site_idx, net_clients[unseen_site_idx])
     # print(("   OD dice is: {}, std is {}".format(dice, np.std(dice_array[:]))))
     lr_ = base_lr
@@ -342,162 +470,33 @@ if __name__ == "__main__":
         for client_idx in source_site_idx:
             dataloader_current = dataloader_clients[client_idx]
             net_current = net_clients[client_idx]
-            net_current.train()
+            # net_current.train()
+            fedmodel_current = fedmodel_clients[client_idx]
             optimizer_current = optimizer_clients[client_idx]
             time1 = time.time()
             iter_num = 0
 
             for i_batch, sampled_batch in enumerate(dataloader_current):
-                
                 time2 = time.time()
 
                 # obtain training data
                 volume_batch, label_batch, disc_contour, disc_bg, cup_contour, cup_bg, pt = sampled_batch['image'], sampled_batch['label'], \
                 sampled_batch['disc_contour'], sampled_batch['disc_bg'], sampled_batch['cup_contour'], sampled_batch['cup_bg'], sampled_batch['pt']
-                print_image=volume_batch.cpu().numpy()
-                # 找到不为零的元素的索引
-                non_zero_indices = np.nonzero(print_image)
-                # 打印不为零的元素及其索引
-                '''
-                for i in range(len(non_zero_indices[0])):
-                    row = non_zero_indices[0][i]
-                    col = non_zero_indices[1][i]
-                    row2 = non_zero_indices[2][i]
-                    col2 = non_zero_indices[3][i]
-                    value = print_image[row, col, row2,col2]
-                    print(f"元素 {value} 在索引 ({row}, {col})")
-                '''
-            # for k,v in pack['image_meta_dict'].items():
-                # volume_batch=torch.unsqueeze(volume_batch,dim=-1)
-                # label_batch=torch.unsqueeze(label_batch,dim=-1)
-                # print(volume_batch.shape,label_batch.shape)
-                # volume_batch_raw = volume_batch[:, :3, ...]
-                # volume_batch_trs_1 = volume_batch[:, 3:6, ...]
-                # volume_batch_trs_2 = volume_batch[:, 6:, ...]
-                # volume_batch_raw, volume_batch_trs_1, volume_batch_trs_2, label_batch = \
-                #     volume_batch_raw.cuda(GPUdevice), volume_batch_trs_1.cuda(GPUdevice), volume_batch_trs_2.cuda(GPUdevice), label_batch.cuda(GPUdevice)
                 volume_batch_raw_np = volume_batch[:, :3, ...]
                 volume_batch_trs_1_np = volume_batch[:, 3:6, ...]
-                #---
-                # volume_batch_raw_np, pt, label_batch = generate_click_prompt(volume_batch_raw_np, label_batch)
-                # print('pt0',pt.shape)
-                point_labels = torch.ones(volume_batch.size(0))
-                if point_labels[0] != -1:
-                    # point_coords = samtrans.ResizeLongestSide(longsize).apply_coords(pt, (h, w))
-                    point_coords = pt
-                    coords_torch = torch.as_tensor(point_coords, dtype=torch.float, device=GPUdevice)
-                    labels_torch = torch.as_tensor(point_labels, dtype=torch.int, device=GPUdevice)
-                    coords_torch, labels_torch = coords_torch[None, :, :], labels_torch[None, :]
-                    pt = (coords_torch, labels_torch)
-                    # print('pt',pt[0].shape,pt[1].shape)
-                with torch.no_grad():
-                    # imge= net.image_encoder(imgs)
-                    se, de = net_current.prompt_encoder(
-                        points=pt,
-                        boxes=None,
-                        masks=None
-                    )
                 volume_batch_raw, volume_batch_trs_1, label_batch = \
-                    volume_batch_raw_np.cuda(GPUdevice), volume_batch_trs_1_np.cuda(GPUdevice), label_batch.cuda(GPUdevice)
-                # print('parameters_name',net_current.image_encoder.named_parameters())
-                parameters_to_calculate_grad = []
-                parameters_name_to_calculate_grad = []
-                for n, value in net_current.image_encoder.named_parameters():
-                    if "Adapter" not in n:
-                        value.requires_grad = False
-                # batch_size, out_chans=256, H', W', 感觉out_chans可以小一点
-                volume_batch_raw_encoded= net_current.image_encoder(volume_batch_raw)
-                outputs_soft_inner, masks_inner_embedding, _ = net_current.mask_decoder(
-                    image_embeddings=volume_batch_raw_encoded,
-                    image_pe=net.prompt_encoder.get_dense_pe(), #  1x(embed_dim)x(embedding_h)x(embedding_w)
-                    sparse_prompt_embeddings=se,
-                    dense_prompt_embeddings=de, 
-                    multimask_output=False,
-                )
-                # label_batch=torchvision.transforms.Resize((args.out_size,args.out_size))(label_batch)
-                disc_contour, disc_bg, cup_contour, cup_bg = disc_contour.cuda(GPUdevice), disc_bg.cuda(GPUdevice), cup_contour.cuda(GPUdevice), cup_bg.cuda(GPUdevice)
-                # torch.Size([2, 3, 1024, 1024]) torch.Size([2, 256, 64, 64]) torch.Size([2, 1, 256, 256]) torch.Size([2, 1, 1024, 1024])
-                # print('outputs_soft_inner, label_batch',volume_batch_raw_np.shape,volume_batch_raw_encoded.shape,outputs_soft_inner.shape, label_batch.shape)
-                # obtain updated parameter at inner loop
-                # outputs_soft_inner, outputs_mask_inner, embedding_inner = net_current(volume_batch_raw)
-                # print('outputs_soft_inner',outputs_soft_inner.shape,outputs_soft_inner)
-                # print('label_batch',label_batch.shape,label_batch)
-                # print('volume_batch_raw',volume_batch_raw)
-                # print('volume_batch_raw_encoded',volume_batch_raw_encoded)
-                loss_inner = lossfunc(outputs_soft_inner, label_batch) #dice
-                for n, value in net_current.image_encoder.named_parameters():
-                    if "Adapter" in n:
-                        parameters_to_calculate_grad.append(value)
-                        parameters_name_to_calculate_grad.append((n,value))
-                grads = torch.autograd.grad(loss_inner, parameters_to_calculate_grad, retain_graph=True,allow_unused=True)
-                # print(grads)
-                new_parameters_name_to_calculate_grad,new_grads=[],[]
-                for index, value in enumerate(parameters_name_to_calculate_grad):
-                    n,v=value
-                    if(grads[index]==None):
-                        pass# print(n,grads[index])
-                    else:
-                        new_parameters_name_to_calculate_grad.append(value)
-                        new_grads.append(grads[index])
-                fast_weights = OrderedDict((name, param - torch.mul(meta_step_size, torch.clamp(grad, 0-clip_value, clip_value))) for
-                                                  ((name, param), grad) in
-                                                  zip(new_parameters_name_to_calculate_grad, new_grads))
-                outer_net=copy_outer_net(fast_weights,net_current)
-                with torch.no_grad():
-                    # imge= net.image_encoder(imgs)
-                    se, de = outer_net.prompt_encoder(
-                        points=pt,
-                        boxes=None,
-                        masks=None,
-                    )
-                for n, value in outer_net.image_encoder.named_parameters():
-                    if "Adapter" not in n:
-                        value.requires_grad = False
-                # 好像有两个weights
-                volume_batch_trs_1_encoded= outer_net.image_encoder(volume_batch_trs_1)
-                outputs_soft_outer_1,masks_outer_embedding, _ = outer_net.mask_decoder(
-                    image_embeddings=volume_batch_trs_1_encoded,
-                    image_pe=net.prompt_encoder.get_dense_pe(), #  1x(embed_dim)x(embedding_h)x(embedding_w)
-                    sparse_prompt_embeddings=se,
-                    dense_prompt_embeddings=de, 
-                    multimask_output=False,
-                )
-                # outer loop evaluation
-                # outputs_soft_outer_1, outputs_mask_outer_1, embedding_outer = net_current(volume_batch_trs_1, fast_weights) #alpha
-                loss_outer_1_dice = dice_loss(outputs_soft_outer_1, label_batch)
-                #print('contour',disc_contour, 'bg',disc_bg, 'contour',cup_contour, 'bg',cup_bg)
-                #print('embedding',embedding_inner)
-                inner_disc_ct_em, inner_disc_bg_em, inner_cup_ct_em, inner_cup_bg_em = \
-                    extract_contour_embedding([disc_contour, disc_bg, cup_contour, cup_bg], masks_inner_embedding)
-                outer_disc_ct_em, outer_disc_bg_em, outer_cup_ct_em, outer_cup_bg_em = \
-                    extract_contour_embedding([disc_contour, disc_bg, cup_contour, cup_bg], masks_outer_embedding)
-
-                disc_ct_em = torch.cat((inner_disc_ct_em, outer_disc_ct_em), 0)
-                #print('inner_disc_ct_em',inner_disc_ct_em, ' outer_disc_ct_em',outer_disc_ct_em)
-                disc_bg_em = torch.cat((inner_disc_bg_em, outer_disc_bg_em), 0)
-                # cup_ct_em = torch.cat((inner_cup_ct_em, outer_cup_ct_em), 0)
-                # cup_bg_em = torch.cat((inner_cup_bg_em, outer_cup_bg_em), 0)
-                disc_em = torch.cat((disc_ct_em, disc_bg_em), 0)
-                # print(disc_em)
-                # cup_em = torch.cat((cup_ct_em, cup_bg_em), 0)
-                label = np.concatenate([np.ones(disc_ct_em.shape[0]), np.zeros(disc_bg_em.shape[0])])
-                label = torch.from_numpy(label)
-                # none可能是因为除的embedding是0了。。。
-                disc_cont_loss = cont_loss_func(disc_em, label)
-                # cup_cont_loss = cont_loss_func(cup_em, label)
-                cont_loss = disc_cont_loss # + cup_cont_loss
-                loss_outer = loss_outer_1_dice + cont_loss * 0.1
-                total_loss = 100 * loss_inner  + loss_outer 
-
+                    volume_batch_raw_np.cuda(local_rank), volume_batch_trs_1_np.cuda(local_rank), label_batch.cuda(local_rank)
+                loss_inner, loss_outer_1_dice, cont_loss, loss_outer, total_loss = fedmodel_current(volume_batch_raw, volume_batch_trs_1,disc_contour, disc_bg, cup_contour, cup_bg, pt)
+                
                 optimizer_current.zero_grad()
                 total_loss.backward()
                 optimizer_current.step()
 
                 iter_num = iter_num + 1
-                if iter_num % display_freq == 0:
+                if iter_num % display_freq == 0 and local_rank==0:
                     writer.add_scalar('lr', lr_, iter_num)
                     writer.add_scalar('loss/inner', loss_inner, iter_num)
-                    writer.add_scalar('loss/outer', loss_outer, iter_num)
+                    # writer.add_scalar('loss/outer', loss_outer, iter_num)
                     writer.add_scalar('loss/total', total_loss, iter_num)
                     logging.info('Epoch: [%d] client [%d] iteration [%d / %d] : inner loss : %f outer dice loss : %f outer cont loss : %f outer loss : %f total loss : %f' % \
                         (epoch_num, client_idx, iter_num, len(dataloader_current), loss_inner.item(), loss_outer_1_dice.item(), cont_loss.item(), loss_outer.item(), total_loss.item()))
@@ -527,28 +526,31 @@ if __name__ == "__main__":
                     # image = np.array(cup_bg[0, 0:1, :, :].data.cpu().numpy())#, dtype='uint8')
                     # writer.add_image('train/cup_bg', image, iter_num)
                 '''
-                if iter_num % 50 ==0:
+                if iter_num % 50 ==0 and local_rank==0:
                     dice, dice_array, haus, haus_array = test(unseen_site_idx, net_current)
                     print(("   OD dice is: {}, std is {}".format(dice, np.std(dice_array[:]))))
-                    break
-            dice, dice_array, haus, haus_array = test(unseen_site_idx, net_current)
-            print(("clinet OD dice is: {}, std is {}".format(dice, np.std(dice_array[:]))))
+            if local_rank==0:
+                dice, dice_array, haus, haus_array = test(unseen_site_idx, net_current)
+                print(("clinet OD dice is: {}, std is {}".format(dice, np.std(dice_array[:]))))
         ## model aggregation
-        update_global_model(net_clients, client_weight)
+        if(local_rank==0):
+            update_global_model(net_clients, client_weight)
 
         ## evaluation test unseen
         with open(os.path.join(snapshot_path, 'evaluation_result.txt'), 'a') as f:
             dice_list = []
             haus_list = []
-            print("epoch {} testing , site {}".format(epoch_num, unseen_site_idx), file=f)
-            dice, dice_array, haus, haus_array = test(unseen_site_idx, net_clients[unseen_site_idx])
-            print(("clinet OD dice is: {}, std is {}".format(dice, np.std(dice_array[:]))))
+            if local_rank==0:
+                print("epoch {} testing , site {}".format(epoch_num, unseen_site_idx), file=f)
+                dice, dice_array, haus, haus_array = test(unseen_site_idx, net_clients[unseen_site_idx])
+                print(("   OD dice is: {}, std is {}".format(dice[0], np.std(dice_array[:, 0]))), file=f)
             # print(("   OC dice is: {}, std is {}".format(dice[1], np.std(dice_array[:, 1]))), file=f)
             
         ## save model
-        save_mode_path = os.path.join(snapshot_path + '/model', 'epoch_' + str(epoch_num) + '.pth')
-        torch.save(net_clients[0].state_dict(), save_mode_path)
-        logging.info("save model to {}".format(save_mode_path))
-
+        if local_rank==0:
+            save_mode_path = os.path.join(snapshot_path + '/model', 'epoch_' + str(epoch_num) + '.pth')
+            torch.save(net_clients[0].state_dict(), save_mode_path)
+            logging.info("save model to {}".format(save_mode_path))
+    dist.destroy_process_group()
     writer.close()
 

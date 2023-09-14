@@ -8,7 +8,7 @@ def parse_args():
     parser.add_argument('--image_size', type=int, default=1024, help='image_size')
     parser.add_argument('--clip_value', type=float,  default=100, help='maximum epoch number to train')
     parser.add_argument('--meta_step_size', type=float,  default=1e-3, help='maximum epoch number to train')
-    parser.add_argument('--base_lr', type=float,  default=0.001, help='maximum epoch number to train')
+    parser.add_argument('--base_lr', type=float,  default=0.0001, help='maximum epoch number to train')
     parser.add_argument('--deterministic', type=int,  default=1, help='whether use deterministic training')
     parser.add_argument('--seed', type=int,  default=1337, help='random seed')
     parser.add_argument('--gpu', type=str,  default='0', help='GPU to use')
@@ -18,6 +18,7 @@ def parse_args():
     parser.add_argument('--sam_ckpt', type=str, default=None, help='pretrain Sam model')
     parser.add_argument('--thd', type=bool, default=False , help='3d or not')
     parser.add_argument('--roi_size', type=int, default=96 , help='resolution of roi')
+    parser.add_argument('--data', type=str,  default='FeTS2022', help='dataset')
     args = parser.parse_args()
     return args
 '''
