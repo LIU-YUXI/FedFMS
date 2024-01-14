@@ -182,6 +182,6 @@ class Unet2D(nn.Module):
             y1_pred = conv2d(y1, weights['seg1.weight'], weights['seg1.bias'], kernel_size=None, stride=1, padding=0) #+ upsample(y2)
         predictions = F.sigmoid(input=y1_pred)
         # pred_compact = torch.argmax(predictions, dim=1) # shape [batch, w, h]
-
+        predictions = F.interpolate(predictions, size=(256, 256), mode='nearest')
         return predictions, predictions, y1
 

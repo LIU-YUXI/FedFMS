@@ -5,7 +5,8 @@ import numpy as np
 def dice_loss(score, target):
     target = target.float()
     smooth = 1e-5
-
+    # print('score',score)
+    # print('target',target)
     loss = 0
     for i in range(target.shape[1]):
         intersect = torch.sum(score[:, i, ...] * target[:, i, ...])

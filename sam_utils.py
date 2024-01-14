@@ -109,7 +109,17 @@ device = torch.device('cuda', int(args.gpu))
 # dis_lr = 0.0002
 # optimizerD = optim.Adam(netD.parameters(), lr=dis_lr, betas=(beta1, 0.999))
 '''end'''
-
+def show_element(print_image):
+    # 找到不为零的元素的索引
+    non_zero_indices = np.nonzero(print_image)        
+    # 打印不为零的元素及其索引
+    for i in range(len(non_zero_indices[0])):
+        row = non_zero_indices[0][i]
+        col = non_zero_indices[1][i]
+        row2 = non_zero_indices[2][i]
+        # col2 = non_zero_indices[3][i]
+        value = print_image[row, col,row2]
+        print(f"元素 {value} 在索引 ({row}, {col})")
 def get_network(args, net, use_gpu=True, gpu_device = 0, distribution = True):
     """ return given network
     """
@@ -1007,7 +1017,59 @@ def vis_image(imgs, pred_masks, gt_masks, save_path, reverse = False, points = N
 
     return
 
+def eval_seg_gpu(pred, true_mask_p, threshold, device):
+    '''
+    threshold: a int or a tuple of int
+    masks: [b, 2, h, w]
+    pred: [b, 2, h, w]
+    '''
+    b, c, h, w = pred.size()
+    if c == 2:
+        iou_d, iou_c, disc_dice, cup_dice = 0, 0, 0, 0
+        for th in threshold:
+            gt_vmask_p = (true_mask_p > th).float().cuda(device)  # 将真实标签移到GPU上
+            vpred = (pred > th).float().cuda(device)  # 将预测结果移到GPU上
+
+            disc_pred = (vpred[:, 0, :, :] > 0.5).int()
+            cup_pred = (vpred[:, 1, :, :] > 0.5).int()
+
+            disc_mask = (gt_vmask_p[:, 0, :, :] > 0.5).int()
+            cup_mask = (gt_vmask_p[:, 1, :, :] > 0.5).int()
+
+            '''iou for torch'''
+            iou_d += iou_torch(disc_pred, disc_mask)
+            iou_c += iou_torch(cup_pred, cup_mask)
+
+            '''dice for torch'''
+            disc_dice += dice_coeff(vpred[:, 0, :, :], gt_vmask_p[:, 0, :, :]).item()
+            cup_dice += dice_coeff(vpred[:, 1, :, :], gt_vmask_p[:, 1, :, :]).item()
+
+        return iou_d / len(threshold), iou_c / len(threshold), disc_dice / len(threshold), cup_dice / len(threshold)
+    else:
+        eiou, edice = 0, 0
+        for th in threshold:
+            gt_vmask_p = (true_mask_p > th).float().cuda(device)  # 将真实标签移到GPU上
+            vpred = (pred > th).float().cuda(device)  # 将预测结果移到GPU上
+
+            disc_pred = (vpred[:, 0, :, :] > 0.5).int()
+            disc_mask = (gt_vmask_p[:, 0, :, :] > 0.5).int()
+
+            '''iou for torch'''
+            eiou += iou_torch(disc_pred, disc_mask)
+
+            '''dice for torch'''
+            edice += dice_coeff(vpred[:, 0, :, :], gt_vmask_p[:, 0, :, :]).item()
+
+        return eiou / len(threshold), edice / len(threshold)
+
+def iou_torch(pred, target):
+    intersection = (pred & target).float().sum()
+    union = (pred | target).float().sum()
+    iou = (intersection + 1e-5) / (union + 1e-5)
+    return iou
+
 def eval_seg(pred,true_mask_p,threshold):
+    # print(pred,true_mask_p)
     '''
     threshold: a int or a tuple of int
     masks: [b,2,h,w]

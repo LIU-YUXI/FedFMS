@@ -1,0 +1,1 @@
+python ./train_fed_sam_large.py --data Prostate --unseen_site 5 --gpu 1 --batch_size 4 --exp prostate-large-1e-4 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/SAM/sam_vit_l_0b3195.pth" # 2>&1 | tee log.log

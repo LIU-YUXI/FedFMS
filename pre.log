@@ -1,0 +1,36 @@
+begin  1
+1 train (31907, 240, 240, 3)
+/mnt/diskB/lyx/FeTS2022_FedDG_1024/1/data_npy/FeTS2022_00194.nii.gz5.npy /mnt/diskB/lyx/FeTS2022_FedDG_1024/1/label_npy/FeTS2022_00194.nii.gz5.npy /mnt/diskB/lyx/FeTS2022_FedDG_1024/1/freq_amp_npy/FeTS2022_00194.nii.gz5.npy
+end 1
+begin  4
+4 train (3166, 240, 240, 3)
+/mnt/diskB/lyx/FeTS2022_FedDG_1024/4/data_npy/FeTS2022_01170.nii.gz5.npy /mnt/diskB/lyx/FeTS2022_FedDG_1024/4/label_npy/FeTS2022_01170.nii.gz5.npy /mnt/diskB/lyx/FeTS2022_FedDG_1024/4/freq_amp_npy/FeTS2022_01170.nii.gz5.npy
+end 4
+begin  5
+5 train (1508, 240, 240, 3)
+/mnt/diskB/lyx/FeTS2022_FedDG_1024/5/data_npy/FeTS2022_01003.nii.gz5.npy /mnt/diskB/lyx/FeTS2022_FedDG_1024/5/label_npy/FeTS2022_01003.nii.gz5.npy /mnt/diskB/lyx/FeTS2022_FedDG_1024/5/freq_amp_npy/FeTS2022_01003.nii.gz5.npy
+end 5
+begin  6
+6 train (2290, 240, 240, 3)
+/mnt/diskB/lyx/FeTS2022_FedDG_1024/6/data_npy/FeTS2022_01444.nii.gz5.npy /mnt/diskB/lyx/FeTS2022_FedDG_1024/6/label_npy/FeTS2022_01444.nii.gz5.npy /mnt/diskB/lyx/FeTS2022_FedDG_1024/6/freq_amp_npy/FeTS2022_01444.nii.gz5.npy
+end 6
+begin  13
+13 train (2505, 240, 240, 3)
+/mnt/diskB/lyx/FeTS2022_FedDG_1024/13/data_npy/FeTS2022_01514.nii.gz5.npy /mnt/diskB/lyx/FeTS2022_FedDG_1024/13/label_npy/FeTS2022_01514.nii.gz5.npy /mnt/diskB/lyx/FeTS2022_FedDG_1024/13/freq_amp_npy/FeTS2022_01514.nii.gz5.npy
+end 13
+begin  16
+16 train (2044, 240, 240, 3)
+/mnt/diskB/lyx/FeTS2022_FedDG_1024/16/data_npy/FeTS2022_00591.nii.gz5.npy /mnt/diskB/lyx/FeTS2022_FedDG_1024/16/label_npy/FeTS2022_00591.nii.gz5.npy /mnt/diskB/lyx/FeTS2022_FedDG_1024/16/freq_amp_npy/FeTS2022_00591.nii.gz5.npy
+end 16
+begin  18
+18 train (24046, 240, 240, 3)
+/mnt/diskB/lyx/FeTS2022_FedDG_1024/18/data_npy/FeTS2022_00464.nii.gz5.npy /mnt/diskB/lyx/FeTS2022_FedDG_1024/18/label_npy/FeTS2022_00464.nii.gz5.npy /mnt/diskB/lyx/FeTS2022_FedDG_1024/18/freq_amp_npy/FeTS2022_00464.nii.gz5.npy
+end 18
+begin  20
+20 train (2221, 240, 240, 3)
+/mnt/diskB/lyx/FeTS2022_FedDG_1024/20/data_npy/FeTS2022_00452.nii.gz5.npy /mnt/diskB/lyx/FeTS2022_FedDG_1024/20/label_npy/FeTS2022_00452.nii.gz5.npy /mnt/diskB/lyx/FeTS2022_FedDG_1024/20/freq_amp_npy/FeTS2022_00452.nii.gz5.npy
+end 20
+begin  21
+21 train (2481, 240, 240, 3)
+/mnt/diskB/lyx/FeTS2022_FedDG_1024/21/data_npy/FeTS2022_00802.nii.gz5.npy /mnt/diskB/lyx/FeTS2022_FedDG_1024/21/label_npy/FeTS2022_00802.nii.gz5.npy /mnt/diskB/lyx/FeTS2022_FedDG_1024/21/freq_amp_npy/FeTS2022_00802.nii.gz5.npy
+end 21

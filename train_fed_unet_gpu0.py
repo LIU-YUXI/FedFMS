@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(map(str, [0,1,2,3,4,5,6,7])) # 一般在程序开头设置
+os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(map(str, [0])) # 一般在程序开头设置
 import sys
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
@@ -82,9 +82,6 @@ elif args.data=='Nuclei':
     # client_name = ['PanNuke2Adrenal_gland','PanNuke2Esophagus', 'PanNuke3Testis', 'PanNuke3Kidney', 'MoNuSAC2020','TNBC','MoNuSAC2018']
     client_name = ['PanNuke2Adrenal_gland','PanNuke2Esophagus', 'PanNuke3Bile-duct','PanNuke3Uterus', 'MoNuSAC2020','TNBC','MoNuSAC2018']
     data_path = '/mnt/diskB/lyx/Nuclei_1024'
-elif args.data=='CTLung':
-    client_name = ['1', '2', '3', '4', '5']
-    data_path = '/mnt/diskB/lyx/CTLung_1024'
 # 还要生成test数据
 client_num = len(client_name)
 client_data_list = []
@@ -180,10 +177,8 @@ def val(site_index, test_net):
         # show_element(mask)
         image = torch.from_numpy(image).float().cuda(GPUdevice)
         mask = torch.from_numpy(mask).cuda(GPUdevice)
-        # mask_data=mask_data[:,:,0]# np.squeeze(mask_data)
-        # mask_data=cv2.resize(mask_data,(image.shape[-1],image.shape[-1]),interpolation=cv2.INTER_NEAREST)
-        # pt = np.expand_dims(random_click(np.array(mask_data), 1, 1), axis=0)
-        pt = np.expand_dims(np.array([0,0]), axis=0)
+        '''
+        pt = np.expand_dims(random_click(np.array(mask_data), 1, 1), axis=0)
         point_labels = torch.ones(image.size(0))
         if point_labels[0] != -1:
             point_coords = pt
@@ -205,6 +200,8 @@ def val(site_index, test_net):
             dense_prompt_embeddings=de, 
             multimask_output=False,
         )
+        '''
+        logit, pred, _ = test_net(image)
         threshold = (0.1, 0.3, 0.5, 0.7, 0.9)
         temp = eval_seg(pred, mask, threshold)
         if(pred.shape[1]==2):
@@ -280,6 +277,7 @@ def test(site_index, test_net):
     eiou_array_cup = []
     # print(test_data_list)
     test_net.eval()
+    test_net = test_net.to(GPUdevice)
     ave_res, mix_res = (0,0,0,0), (0,0,0,0)
     # print('test',site_index,len(test_data_list))
     for fid, filename in enumerate(test_data_list):
@@ -304,10 +302,10 @@ def test(site_index, test_net):
         '''
         # print('dmi',mask)
         # print(mask_data.shape)
-        # mask_data=mask_data[:,:,0]# np.squeeze(mask_data)
-        # mask_data=cv2.resize(mask_data,(image.shape[-1],image.shape[-1]),interpolation=cv2.INTER_NEAREST)
-        # pt = np.expand_dims(random_click(np.array(mask_data), 1, 1), axis=0)
-        pt = np.expand_dims(np.array([0,0]), axis=0)
+        '''
+        mask_data=mask_data[:,:,0]
+        mask_data=cv2.resize(mask_data,(image.shape[-1],image.shape[-1]),interpolation=cv2.INTER_NEAREST)
+        pt = np.expand_dims(random_click(np.array(mask_data), 1, 1), axis=0)
         # print('pt',pt)
         point_labels = torch.ones(image.size(0))
         if point_labels[0] != -1:
@@ -333,9 +331,13 @@ def test(site_index, test_net):
             dense_prompt_embeddings=de, 
             multimask_output=False,
         )
+        '''
+        image,mask = image.cuda(GPUdevice), mask.cuda(GPUdevice)
+        logit, pred, _ = test_net(image)
         # print('pred.shape,mask.shape',pred.shape,mask.shape)
         threshold = (0.1, 0.3, 0.5, 0.7, 0.9)
-        
+        # print(pred.device)
+        # print(mask.device)
         temp = eval_seg(pred, mask, threshold)
         # save_image(pred.detach().cpu().numpy(),'pred')
         # save_image(mask.detach().cpu().numpy(),'mask')
@@ -437,7 +439,8 @@ if __name__ == "__main__":
                                 ToTensor(),
                                 ]),client_name=client_name)
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True,  num_workers=4, pin_memory=True, worker_init_fn=worker_init_fn)
-        net = sam_model_registry[args.sam_type](args,checkpoint=args.sam_ckpt).to(GPUdevice)# Unet2D(num_classes=1)
+        net =Unet2D(num_classes=args.num_classes).to(GPUdevice)# Unet2D(num_classes=1)
+        print(net.seg1.weight.device)
         start_epoch=0
         if args.weights != 0:
             print(f'=> resuming from {args.weights}')
@@ -495,41 +498,14 @@ if __name__ == "__main__":
                 # obtain training data
                 volume_batch, label_batch, pt = sampled_batch['image'], sampled_batch['label'], sampled_batch['pt']
                 volume_batch_raw_np = volume_batch[:, :3, ...]
-                point_labels = torch.ones(volume_batch.size(0))
-                if point_labels[0] != -1:
-                    # point_coords = samtrans.ResizeLongestSide(longsize).apply_coords(pt, (h, w))
-                    point_coords = pt
-                    coords_torch = torch.as_tensor(point_coords, dtype=torch.float, device=GPUdevice)
-                    labels_torch = torch.as_tensor(point_labels, dtype=torch.int, device=GPUdevice)
-                    coords_torch, labels_torch = coords_torch[None, :, :], labels_torch[None, :]
-                    pt = (coords_torch, labels_torch)
-                    # print('pt',pt[0].shape,pt[1].shape)
-                with torch.no_grad():
-                    # imge= net.image_encoder(imgs)
-                    se, de = net_current.prompt_encoder(
-                        points=pt,
-                        boxes=None,
-                        masks=None
-                    )
                 volume_batch_raw, label_batch = \
                     volume_batch_raw_np.cuda(GPUdevice), label_batch.cuda(GPUdevice)
                 # print('parameters_name',net_current.image_encoder.named_parameters())
-                parameters_to_calculate_grad = []
-                parameters_name_to_calculate_grad = []
-                for n, value in net_current.image_encoder.named_parameters():
-                    if "Adapter" not in n:
-                        value.requires_grad = False
-                # batch_size, out_chans=256, H', W', 感觉out_chans可以小一点
-                volume_batch_raw_encoded= net_current.image_encoder(volume_batch_raw)
-                outputs_soft_inner, masks_inner_embedding, _ = net_current.mask_decoder(
-                    image_embeddings=volume_batch_raw_encoded,
-                    image_pe=net.prompt_encoder.get_dense_pe(), #  1x(embed_dim)x(embedding_h)x(embedding_w)
-                    sparse_prompt_embeddings=se,
-                    dense_prompt_embeddings=de, 
-                    multimask_output=False,
-                )
+                outputs_soft_inner, outputs_mask_inner, embedding_inner = net_current(volume_batch_raw)
                 # print("outputs_soft_inner.shape,label_batch.shape",outputs_soft_inner.shape,label_batch.shape)
                 # loss_inner = F.binary_cross_entropy_with_logits(outputs_soft_inner, label_batch)
+                outputs_soft_inner, outputs_mask_inner, embedding_inner = outputs_soft_inner.to(GPUdevice), outputs_mask_inner.to(GPUdevice), embedding_inner.to(GPUdevice)
+                # print(net_current.seg1.weight.device,outputs_soft_inner.device,label_batch.device)
                 loss_inner = lossfunc(outputs_soft_inner, label_batch) #dice
                 # loss_inner = dice_loss(outputs_soft_inner, label_batch)
                 total_loss = loss_inner

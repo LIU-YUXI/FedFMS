@@ -71,6 +71,7 @@ class MaskDecoder(nn.Module):
         # print(self.num_multimask_outputs)
         self.seg1 = nn.Conv2d(self.num_mask_tokens, num_classes, 1)
         self.num_classes = num_classes
+        self.softmax = nn.Softmax(dim=0)
 
     def forward(
         self,
@@ -108,14 +109,22 @@ class MaskDecoder(nn.Module):
         if multimask_output:
             mask_slice = slice(1, None)
         else:
-            mask_slice = slice(0, 1)        
+            mask_slice = slice(0, 1)     
+        '''  
         if self.num_classes > 1:
-            masks =self.seg1(masks_embedding)
+            mask_slice = slice(0,self.num_classes)
+        masks = masks_embedding[:, mask_slice, :, :]
+        ''' 
+        if self.num_classes > 1:
+            masks = self.seg1(masks_embedding)
+            # masks =F.normalize(self.seg1(masks_embedding))
+            # masks = self.softmax(self.seg1(masks_embedding))
+            # masks = torch.sigmoid(masks)
         else:
-
             masks = masks_embedding[:, mask_slice, :, :]
         iou_pred = iou_pred[:, mask_slice]
         # Prepare output
+        # nn.Softmax(dim=1)
         return masks, masks_embedding, iou_pred
 
     def predict_masks(

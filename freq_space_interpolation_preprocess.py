@@ -135,7 +135,7 @@ class Brain(object):
         assert site in list(channels.keys())
         self.split = split
         base_path = base_path if base_path is not None else'/mnt/diskB/lyx/FeTS2022'
-        save_base_path = '/mnt/diskB/lyx/FeTS2022_FedDG_1024/'
+        save_base_path = '/mnt/diskB/lyx/FeTS2022_FedDG_1024'
         sitedir = os.path.join(base_path, site)
         save_sitedir = os.path.join(save_base_path, site)
         imgsdir = os.path.join(sitedir, 'images')
@@ -173,7 +173,6 @@ class Brain(object):
             image_v = convert_from_nii_to_png(image_v)
             # 155 240 240
             # print('image_v',image_v.shape)
-            # ？？？？？ 可能一次读入有多个图片
             for i in range(1, label_v.shape[0] - 1):
                 label = np.array(label_v[i, :, :])
                 if (np.all(label == 0)) and i%5 != 0:

@@ -26,7 +26,7 @@ from pytorch_metric_learning import losses
 from networks.unet2d import Unet2D
 from utils.losses import dice_loss
 from utils.util import _eval_dice, _eval_haus, _connectivity_region_analysis, parse_fn_haus
-from dataloaders.fundus_dataloader import Dataset, ToTensor
+from dataloaders.federated_dataloader import Dataset, ToTensor, ProstateDataset
 
 from models.sam import SamPredictor, sam_model_registry
 from models.sam.utils.transforms import ResizeLongestSide
@@ -59,23 +59,44 @@ batch_size = args.batch_size * len(args.gpu.split(','))
 meta_step_size = args.meta_step_size
 clip_value = args.clip_value
 base_lr = args.base_lr
-client_num = args.client_num
+# client_num = args.client_num
 max_epoch = args.max_epoch
 display_freq = args.display_freq
 # ？？？
 client_name = ['1', '4', '5', '6', '13', '16', '18', '20', '21']
 data_path = '/mnt/diskB/lyx/FeTS2022_FedDG_1024'
+if args.data=='Prostate':
+    client_name =  ['BIDMC', 'HK', 'I2CVB', 'ISBI', 'ISBI_1.5', 'UCL']
+    data_path = '/mnt/diskB/lyx/Prostate_processed_1024'
+elif args.data=='Fundus':
+    # client_name =  ['G1020', 'ORIGA', 'REFUGE','Drishti-GS1']# ,'RIM-ONE'
+    client_name =  ['RIM-ONE','REFUGE', 'ORIGA','G1020','Drishti-GS1']# ,
+    # Drishti不是1,'RIM-ONE'也不是
+    data_path = '/mnt/diskB/lyx/Fundus_1024'
+elif args.data=='Nuclei':
+    # client_name = ['MoNuSAC2018','PanNuke2','PanNuke3','TNBC','MoNuSAC2020']
+    #client_name = ['TNBC','MoNuSAC2018','MoNuSAC2020']# ,'PanNuke3','PanNuke2'
+    # client_name = ['PanNuke3Breast', 'PanNuke3Testis', 'PanNuke3Kidney', 'PanNuke3Bile-duct', 'PanNuke3Lung', 'PanNuke3Skin', 'PanNuke3Stomach',  'PanNuke3HeadNeck', 'PanNuke3Liver', 'PanNuke3Pancreatic', 'PanNuke3Ovarian', 'PanNuke3Esophagus', 'PanNuke3Bladder', 'PanNuke3Thyroid', 'PanNuke3Uterus', 'PanNuke3Colon', 'PanNuke3Prostate', 'PanNuke3Adrenal_gland','PanNuke3Cervix']
+    # client_name = ['PanNuke2Adrenal_gland','PanNuke2Esophagus', 'PanNuke3Testis', 'PanNuke3Kidney', 'PanNuke2Thyroid','PanNuke2Liver','PanNuke3Skin','PanNuke3Uterus','MoNuSAC2020','TNBC','MoNuSAC2018']
+    client_name = ['PanNuke2Adrenal_gland','PanNuke2Esophagus', 'PanNuke3Testis', 'PanNuke3Kidney', 'MoNuSAC2020','TNBC','MoNuSAC2018']
+    data_path = '/mnt/diskB/lyx/Nuclei_1024'
 # 还要生成test数据
+client_num = len(client_name)
 client_data_list = []
+client_val_data_list = []
 slice_num =[]
 for client_idx in range(client_num):
     print('{}/{}/data_npy/*'.format(data_path,client_name[client_idx]))
     client_data_list.append(glob('{}/{}/data_npy/*'.format(data_path,client_name[client_idx])))
-    print (len(client_data_list[client_idx]))
+    client_val_data_list.append(glob('{}/{}/val_data_npy/*'.format(data_path,client_name[client_idx])))
+    print (len(client_data_list[client_idx]),len(client_val_data_list[client_idx]))
     slice_num.append(len(client_data_list[client_idx]))
+# print(client_val_data_list)
 slice_num = np.array(slice_num)
 #volume_size = [384, 384, 3]
 unseen_site_idx = args.unseen_site
+client_data_list[unseen_site_idx].extend(client_val_data_list[unseen_site_idx])
+print('unseen site data length:',len(client_data_list[unseen_site_idx]))
 source_site_idx = [i for i in range(client_num)]
 source_site_idx.remove(unseen_site_idx)
 client_weight = slice_num[source_site_idx] / np.sum(slice_num[source_site_idx])
@@ -83,6 +104,8 @@ client_weight = np.round(client_weight, decimals=2)
 client_weight[-1] = 1 - np.sum(client_weight[:-1])
 client_weight = np.insert(client_weight, unseen_site_idx, 0)
 print(client_weight)
+# client_weight= np.full((client_num,), 1/client_num)
+# client_weight[-1] = 1 - np.sum(client_weight[:2])
 if args.deterministic:
     cudnn.benchmark = False
     cudnn.deterministic = True
@@ -137,13 +160,109 @@ def extract_contour_embedding(contour_list, embeddings):
         '''
         average_embeddings_list.append(average_embeddings)
     return average_embeddings_list
+def val(site_index, test_net):
+    val_data_list = client_val_data_list[site_index]
+    dice_array = []
+    eiou_array = []
+    dice_array_cup = []
+    eiou_array_cup = []
+    test_net.eval()
+    for fid, filename in enumerate(val_data_list):
+        data = np.load(filename)/ 255.0
+        mask_data = np.load(filename.replace("data", "label"))
+        image = np.expand_dims(data[..., :3].transpose(2, 0, 1), axis=0)
+        mask = np.expand_dims(mask_data.transpose(2, 0, 1), axis=0)
+        image = torch.from_numpy(image).float().cuda(GPUdevice)
+        mask = torch.from_numpy(mask).cuda(GPUdevice)
+        mask_data=mask_data[:,:,0]# np.squeeze(mask_data)
+        mask_data=cv2.resize(mask_data,(image.shape[-1],image.shape[-1]),interpolation=cv2.INTER_NEAREST)
+        pt = np.expand_dims(random_click(np.array(mask_data), 1, 1), axis=0)
+        point_labels = torch.ones(image.size(0))
+        if point_labels[0] != -1:
+            point_coords = pt
+            coords_torch = torch.as_tensor(point_coords, dtype=torch.float, device=GPUdevice)
+            labels_torch = torch.as_tensor(point_labels, dtype=torch.int, device=GPUdevice)
+            coords_torch, labels_torch = coords_torch[None, :, :], labels_torch[None, :]
+            pt = (coords_torch, labels_torch)
+        se, de = test_net.prompt_encoder(
+            points=pt,
+            boxes=None,
+            masks=None
+        )
+        # image,mask = image.cuda(GPUdevice), mask.cuda(GPUdevice)
+        image_encoded= test_net.image_encoder(image)
+        pred, _, _ = test_net.mask_decoder(
+            image_embeddings=image_encoded,
+            image_pe=test_net.prompt_encoder.get_dense_pe(), #  1x(embed_dim)x(embedding_h)x(embedding_w)
+            sparse_prompt_embeddings=se,
+            dense_prompt_embeddings=de, 
+            multimask_output=False,
+        )
+        threshold = (0.1, 0.3, 0.5, 0.7, 0.9)
+        temp = eval_seg(pred, mask, threshold)
+        if(pred.shape[1]==2):
+            iou_d, iou_c, disc_dice, cup_dice= temp
+            dice_array.append(disc_dice)
+            eiou_array.append(iou_d)
+            dice_array_cup.append(cup_dice)
+            eiou_array_cup.append(iou_c)
+        else:
+            eiou, edice = temp
+            dice_array.append(edice)
+            eiou_array.append(eiou)
+    if args.num_classes==2:
+        dice_array = np.array(dice_array)
+        eiou_array = np.array(eiou_array)
+        dice_array_cup = np.array(dice_array_cup)
+        eiou_array_cup = np.array(eiou_array_cup)
+        # print (dice_array.shape)
+        dice_avg = np.mean(dice_array, axis=0).tolist()
+        eiou_avg = np.mean(eiou_array, axis=0).tolist()
+        dice_avg_cup = np.mean(dice_array_cup, axis=0).tolist()
+        eiou_avg_cup = np.mean(eiou_array_cup, axis=0).tolist()
+        logging.info("validate data from client %d Disc Dice %.4f, Disc IOU %.4f, Cup Dice %.4f, Cup IOU %.4f" % (site_index, dice_avg, eiou_avg, dice_avg_cup, eiou_avg_cup))
+        return dice_avg,eiou_avg, dice_avg_cup, eiou_avg_cup
+    else:
+        dice_array = np.array(dice_array)
+        eiou_array = np.array(eiou_array)
+        # print (dice_array.shape)
+        dice_avg = np.mean(dice_array, axis=0).tolist()
+        eiou_avg = np.mean(eiou_array, axis=0).tolist()
+        logging.info("validate data from client %d OD dice_avg %.4f, Eiou %.4f" % (site_index, dice_avg, eiou_avg))
+        return dice_avg,eiou_avg
+
+def validation(test_net):
+    dice_avg, eiou_avg, dice_avg_cup, eiou_avg_cup =[], [], [], []
+    for i in source_site_idx:
+        if args.num_classes==2:
+            dice_avg_one, eiou_avg_one, dice_avg_cup_one, eiou_avg_cup_one=val(i,test_net)
+            dice_avg.append(dice_avg_one)
+            eiou_avg.append(eiou_avg_one)
+            dice_avg_cup.append(dice_avg_cup_one)
+            eiou_avg_cup.append(eiou_avg_cup_one)
+        else:
+            dice_avg_one, eiou_avg_one=val(i,test_net)
+            dice_avg.append(dice_avg_one)
+            eiou_avg.append(eiou_avg_one)
+    dice_avg = np.mean(np.array(dice_avg), axis=0)
+    eiou_avg = np.mean(np.array(eiou_avg), axis=0)
+    if args.num_classes==2:
+        dice_avg_cup = np.mean(np.array(dice_avg_cup), axis=0)
+        eiou_avg_cup = np.mean(np.array(eiou_avg_cup), axis=0)
+        logging.info("Averagy validation: Disc Dice %.4f, Disc IOU %.4f, Cup Dice %.4f, Cup IOU %.4f" % (dice_avg, eiou_avg, dice_avg_cup, eiou_avg_cup))
+        return dice_avg, eiou_avg, dice_avg_cup, eiou_avg_cup
+    else:
+        logging.info("Averagy validation: OD dice_avg %.4f, Eiou %.4f" % (dice_avg, eiou_avg))
+        return dice_avg, eiou_avg
+
 def test(site_index, test_net):
 
     test_data_list = client_data_list[site_index]
 
     dice_array = []
-    haus_array = []
     eiou_array = []
+    dice_array_cup = []
+    eiou_array_cup = []
     # print(test_data_list)
     test_net.eval()
     ave_res, mix_res = (0,0,0,0), (0,0,0,0)
@@ -159,8 +278,16 @@ def test(site_index, test_net):
         # mask在另外一个地方文件夹。。。
         image = torch.from_numpy(image).float()
         mask = torch.from_numpy(mask)
+        '''
+        # save mask
+        mask_show= mask_data[:,:,0].copy()
+        mask_show[mask_show==1]=255
+        image_save = Image.fromarray(mask_show)
+        image_save.save("../output/output-{}.jpg".format(client_name[unseen_site_idx]))
+        '''
         # print('dmi',mask)
-        mask_data=np.squeeze(mask_data)
+        # print(mask_data.shape)
+        mask_data=mask_data[:,:,0]
         mask_data=cv2.resize(mask_data,(image.shape[-1],image.shape[-1]),interpolation=cv2.INTER_NEAREST)
         pt = np.expand_dims(random_click(np.array(mask_data), 1, 1), axis=0)
         # print('pt',pt)
@@ -191,26 +318,6 @@ def test(site_index, test_net):
         threshold = (0.1, 0.3, 0.5, 0.7, 0.9)
         
         temp = eval_seg(pred, mask, threshold)
-        # print(temp)
-        # mix_res = tuple([sum(a) for a in zip(mix_res, temp)])
-        
-        '''
-        # print('pred_y.shape',pred.shape)
-        # logit, pred, _ = test_net.test(image,pt,multimask_output=False)
-        pred_y = pred.cpu().detach().numpy()
-        pred_y[pred_y>0.75] = 1
-        pred_y[pred_y<0.75] = 0
-
-        pred_y_0 = pred_y[:, 0:1, ...]
-        # pred_y_1 = pred_y[:, 1:, ...]
-        processed_pred_y_0 = _connectivity_region_analysis(pred_y_0)
-        #processed_pred_y_1 = _connectivity_region_analysis(pred_y_1)
-        # processed_pred_y = np.concatenate([processed_pred_y_0, processed_pred_y_1], axis=1)
-        processed_pred_y=processed_pred_y_0
-        dice_subject = _eval_dice(mask.cpu().numpy(), processed_pred_y)
-        # haus_subject = _eval_haus(mask, processed_pred_y)
-        dice_array.append(dice_subject)
-        # haus_array.append(haus_subject)
         '''
         eiou, edice = temp
         dice_array.append(edice)
@@ -226,6 +333,40 @@ def test(site_index, test_net):
     # logging.info("OD dice_avg %.4f OC dice_avg %.4f" % (dice_avg[0], dice_avg[1]))
     logging.info("OD dice_avg %.4f, Eiou %.4f" % (dice_avg, eiou_avg))
     return dice_avg, dice_array, eiou_avg, eiou_array
+        '''
+        if(pred.shape[1]==2):
+            iou_d, iou_c, disc_dice, cup_dice= temp
+            dice_array.append(disc_dice)
+            eiou_array.append(iou_d)
+            dice_array_cup.append(cup_dice)
+            eiou_array_cup.append(iou_c)
+        else:
+            eiou, edice = temp
+            dice_array.append(edice)
+            eiou_array.append(eiou)
+    if args.num_classes==2:
+        dice_array = np.array(dice_array)
+        eiou_array = np.array(eiou_array)
+        dice_array_cup = np.array(dice_array_cup)
+        eiou_array_cup = np.array(eiou_array_cup)
+        # print (dice_array.shape)
+        dice_avg = np.mean(dice_array, axis=0).tolist()
+        eiou_avg = np.mean(eiou_array, axis=0).tolist()
+        dice_avg_cup = np.mean(dice_array_cup, axis=0).tolist()
+        eiou_avg_cup = np.mean(eiou_array_cup, axis=0).tolist()
+        logging.info("Test Disc Dice %.4f, Disc IOU %.4f, Cup Dice %.4f, Cup IOU %.4f" % (dice_avg, eiou_avg, dice_avg_cup, eiou_avg_cup))
+        return dice_avg,eiou_avg, dice_avg_cup, eiou_avg_cup
+    else:
+        dice_array = np.array(dice_array)
+        eiou_array = np.array(eiou_array)
+        # print (dice_array.shape)
+        dice_avg = np.mean(dice_array, axis=0).tolist()
+        eiou_avg = np.mean(eiou_array, axis=0).tolist()
+        logging.info("Test OD dice_avg %.4f, Eiou %.4f" % (dice_avg, eiou_avg))
+        return dice_avg, eiou_avg
+
+
+
 def copy_outer_net(fast_weights,net_current):
     # 深拷贝net_current模型
     net_copy = copy.deepcopy(net_current)
@@ -264,12 +405,18 @@ if __name__ == "__main__":
         freq_site_idx = source_site_idx.copy()
         if client_idx != unseen_site_idx:
             freq_site_idx.remove(client_idx)
-        dataset = Dataset(client_idx=client_idx, data_path=data_path,freq_site_idx=freq_site_idx,
+        if args.data=='Prostate':
+            dataset = ProstateDataset(client_idx=client_idx, data_path=data_path,freq_site_idx=freq_site_idx,
                                 split='train', transform = transforms.Compose([
                                 ToTensor(),
-                                ]))
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True,  num_workers=1, pin_memory=True, worker_init_fn=worker_init_fn)
-        net = sam_model_registry['vit_b'](args,checkpoint=args.sam_ckpt).to(GPUdevice)# Unet2D(num_classes=1)
+                                ]),client_name=client_name)
+        else:
+            dataset = Dataset(client_idx=client_idx, data_path=data_path,freq_site_idx=freq_site_idx,
+                                split='train', transform = transforms.Compose([
+                                ToTensor(),
+                                ]),client_name=client_name)
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True,  num_workers=4, pin_memory=True, worker_init_fn=worker_init_fn)
+        net = sam_model_registry['vit_l'](args,checkpoint=args.sam_ckpt).to(GPUdevice)# Unet2D(num_classes=1)
         # net = nn.DataParallel(net, device_ids=device_list) 
         # net = net.cuda()
         # net = net.cuda(GPUdevice)
@@ -278,7 +425,8 @@ if __name__ == "__main__":
             weights = torch.load(args.pretrain)
             net.load_state_dict(weights,strict=False)
         '''
-        optimizer = torch.optim.Adam(net.parameters(), lr=args.base_lr, betas=(0.9, 0.999))
+        lr=args.base_lr# if client_idx!=client_num-2 else 0.1*args.base_lr
+        optimizer = torch.optim.Adam(net.parameters(), lr=lr, betas=(0.9, 0.999))
         dataloader_clients.append(dataloader)
         net_clients.append(net)
         optimizer_clients.append(optimizer)
@@ -292,9 +440,9 @@ if __name__ == "__main__":
 
     # start federated learning
     writer = SummaryWriter(snapshot_path+'/log')
-    # dice, dice_array, haus, haus_array = test(unseen_site_idx, net_clients[unseen_site_idx])
-    # print(("   OD dice is: {}, std is {}".format(dice, np.std(dice_array[:]))))
     lr_ = base_lr
+    test(unseen_site_idx, net_clients[unseen_site_idx])
+    # validation(net_clients[unseen_site_idx])
     for epoch_num in tqdm(range(max_epoch), ncols=70):
         # update_global_model(net_clients, client_weight)
         for client_idx in source_site_idx:
@@ -304,20 +452,14 @@ if __name__ == "__main__":
             optimizer_current = optimizer_clients[client_idx]
             time1 = time.time()
             iter_num = 0
-
+            # validation(net_current)
             for i_batch, sampled_batch in enumerate(dataloader_current):
                 
                 time2 = time.time()
 
                 # obtain training data
-                volume_batch, label_batch, disc_contour, disc_bg, cup_contour, cup_bg, pt = sampled_batch['image'], sampled_batch['label'], \
-                sampled_batch['disc_contour'], sampled_batch['disc_bg'], sampled_batch['cup_contour'], sampled_batch['cup_bg'], sampled_batch['pt']
-                break
+                volume_batch, label_batch, pt = sampled_batch['image'], sampled_batch['label'], sampled_batch['pt']
                 volume_batch_raw_np = volume_batch[:, :3, ...]
-                volume_batch_trs_1_np = volume_batch[:, 3:6, ...]
-                #---
-                # volume_batch_raw_np, pt, label_batch = generate_click_prompt(volume_batch_raw_np, label_batch)
-                # print('pt0',pt.shape)
                 point_labels = torch.ones(volume_batch.size(0))
                 if point_labels[0] != -1:
                     # point_coords = samtrans.ResizeLongestSide(longsize).apply_coords(pt, (h, w))
@@ -334,8 +476,8 @@ if __name__ == "__main__":
                         boxes=None,
                         masks=None
                     )
-                volume_batch_raw, volume_batch_trs_1, label_batch = \
-                    volume_batch_raw_np.cuda(GPUdevice), volume_batch_trs_1_np.cuda(GPUdevice), label_batch.cuda(GPUdevice)
+                volume_batch_raw, label_batch = \
+                    volume_batch_raw_np.cuda(GPUdevice), label_batch.cuda(GPUdevice)
                 # print('parameters_name',net_current.image_encoder.named_parameters())
                 parameters_to_calculate_grad = []
                 parameters_name_to_calculate_grad = []
@@ -351,80 +493,10 @@ if __name__ == "__main__":
                     dense_prompt_embeddings=de, 
                     multimask_output=False,
                 )
-                # label_batch=torchvision.transforms.Resize((args.out_size,args.out_size))(label_batch)
-                disc_contour, disc_bg, cup_contour, cup_bg = disc_contour.cuda(GPUdevice), disc_bg.cuda(GPUdevice), cup_contour.cuda(GPUdevice), cup_bg.cuda(GPUdevice)
-                # torch.Size([2, 3, 1024, 1024]) torch.Size([2, 256, 64, 64]) torch.Size([2, 1, 256, 256]) torch.Size([2, 1, 1024, 1024])
-                # print('outputs_soft_inner, label_batch',volume_batch_raw_np.shape,volume_batch_raw_encoded.shape,outputs_soft_inner.shape, label_batch.shape)
-                # obtain updated parameter at inner loop
-                # outputs_soft_inner, outputs_mask_inner, embedding_inner = net_current(volume_batch_raw)
-                # print('outputs_soft_inner',outputs_soft_inner.shape,outputs_soft_inner)
-                # print('label_batch',label_batch.shape,label_batch)
-                # print('volume_batch_raw',volume_batch_raw)
-                # print('volume_batch_raw_encoded',volume_batch_raw_encoded)
+                # print("outputs_soft_inner.shape,label_batch.shape",outputs_soft_inner.shape,label_batch.shape)
+                # loss_inner = F.binary_cross_entropy_with_logits(outputs_soft_inner, label_batch)
                 loss_inner = lossfunc(outputs_soft_inner, label_batch) #dice
-                for n, value in net_current.image_encoder.named_parameters():
-                    if "Adapter" in n:
-                        parameters_to_calculate_grad.append(value)
-                        parameters_name_to_calculate_grad.append((n,value))
-                grads = torch.autograd.grad(loss_inner, parameters_to_calculate_grad, retain_graph=True,allow_unused=True)
-                # print(grads)
-                new_parameters_name_to_calculate_grad,new_grads=[],[]
-                for index, value in enumerate(parameters_name_to_calculate_grad):
-                    n,v=value
-                    if(grads[index]==None):
-                        pass# print(n,grads[index])
-                    else:
-                        new_parameters_name_to_calculate_grad.append(value)
-                        new_grads.append(grads[index])
-                fast_weights = OrderedDict((name, param - torch.mul(meta_step_size, torch.clamp(grad, 0-clip_value, clip_value))) for
-                                                  ((name, param), grad) in
-                                                  zip(new_parameters_name_to_calculate_grad, new_grads))
-                outer_net=copy_outer_net(fast_weights,net_current)
-                with torch.no_grad():
-                    # imge= net.image_encoder(imgs)
-                    se, de = outer_net.prompt_encoder(
-                        points=pt,
-                        boxes=None,
-                        masks=None,
-                    )
-                for n, value in outer_net.image_encoder.named_parameters():
-                    if "Adapter" not in n:
-                        value.requires_grad = False
-                # 好像有两个weights
-                volume_batch_trs_1_encoded= outer_net.image_encoder(volume_batch_trs_1)
-                outputs_soft_outer_1,masks_outer_embedding, _ = outer_net.mask_decoder(
-                    image_embeddings=volume_batch_trs_1_encoded,
-                    image_pe=net.prompt_encoder.get_dense_pe(), #  1x(embed_dim)x(embedding_h)x(embedding_w)
-                    sparse_prompt_embeddings=se,
-                    dense_prompt_embeddings=de, 
-                    multimask_output=False,
-                )
-                # outer loop evaluation
-                # outputs_soft_outer_1, outputs_mask_outer_1, embedding_outer = net_current(volume_batch_trs_1, fast_weights) #alpha
-                loss_outer_1_dice = dice_loss(outputs_soft_outer_1, label_batch)
-                #print('contour',disc_contour, 'bg',disc_bg, 'contour',cup_contour, 'bg',cup_bg)
-                #print('embedding',embedding_inner)
-                inner_disc_ct_em, inner_disc_bg_em, inner_cup_ct_em, inner_cup_bg_em = \
-                    extract_contour_embedding([disc_contour, disc_bg, cup_contour, cup_bg], masks_inner_embedding)
-                outer_disc_ct_em, outer_disc_bg_em, outer_cup_ct_em, outer_cup_bg_em = \
-                    extract_contour_embedding([disc_contour, disc_bg, cup_contour, cup_bg], masks_outer_embedding)
-
-                disc_ct_em = torch.cat((inner_disc_ct_em, outer_disc_ct_em), 0)
-                #print('inner_disc_ct_em',inner_disc_ct_em, ' outer_disc_ct_em',outer_disc_ct_em)
-                disc_bg_em = torch.cat((inner_disc_bg_em, outer_disc_bg_em), 0)
-                # cup_ct_em = torch.cat((inner_cup_ct_em, outer_cup_ct_em), 0)
-                # cup_bg_em = torch.cat((inner_cup_bg_em, outer_cup_bg_em), 0)
-                disc_em = torch.cat((disc_ct_em, disc_bg_em), 0)
-                # print(disc_em)
-                # cup_em = torch.cat((cup_ct_em, cup_bg_em), 0)
-                label = np.concatenate([np.ones(disc_ct_em.shape[0]), np.zeros(disc_bg_em.shape[0])])
-                label = torch.from_numpy(label)
-                # none可能是因为除的embedding是0了。。。
-                disc_cont_loss = cont_loss_func(disc_em, label)
-                # cup_cont_loss = cont_loss_func(cup_em, label)
-                cont_loss = disc_cont_loss # + cup_cont_loss
-                loss_outer = loss_outer_1_dice + cont_loss * 0.1
-                total_loss = 100 * loss_inner  + loss_outer 
+                total_loss = loss_inner
 
                 optimizer_current.zero_grad()
                 total_loss.backward()
@@ -434,10 +506,15 @@ if __name__ == "__main__":
                 if iter_num % display_freq == 0:
                     writer.add_scalar('lr', lr_, iter_num)
                     writer.add_scalar('loss/inner', loss_inner, iter_num)
-                    writer.add_scalar('loss/outer', loss_outer, iter_num)
+                    # writer.add_scalar('loss/outer', loss_outer, iter_num)
                     writer.add_scalar('loss/total', total_loss, iter_num)
+                    logging.info('Epoch: [%d] client [%d] iteration [%d / %d] : inner loss : %f' % \
+                        (epoch_num, client_idx, iter_num, len(dataloader_current), loss_inner.item()))
+                    '''
                     logging.info('Epoch: [%d] client [%d] iteration [%d / %d] : inner loss : %f outer dice loss : %f outer cont loss : %f outer loss : %f total loss : %f' % \
                         (epoch_num, client_idx, iter_num, len(dataloader_current), loss_inner.item(), loss_outer_1_dice.item(), cont_loss.item(), loss_outer.item(), total_loss.item()))
+                    '''
+                    
                 '''
                 if iter_num % 20 == 0:
                     image = np.array(volume_batch_raw_np[0, 0:3, :, :], dtype='uint8')
@@ -464,12 +541,10 @@ if __name__ == "__main__":
                     # image = np.array(cup_bg[0, 0:1, :, :].data.cpu().numpy())#, dtype='uint8')
                     # writer.add_image('train/cup_bg', image, iter_num)
                 '''
-                if iter_num % 50 ==0:
-                    dice, dice_array, haus, haus_array = test(unseen_site_idx, net_current)
-                    print(("   OD dice is: {}, std is {}".format(dice, np.std(dice_array[:]))))
+                if iter_num % 10000==0:
+                    val(client_idx,net_current)
                     # break
-            dice, dice_array, haus, haus_array = test(unseen_site_idx, net_current)
-            print(("clinet OD dice is: {}, std is {}".format(dice, np.std(dice_array[:]))))
+            # validation(net_current)
         ## model aggregation
         update_global_model(net_clients, client_weight)
 
@@ -478,8 +553,16 @@ if __name__ == "__main__":
             dice_list = []
             haus_list = []
             print("epoch {} testing , site {}".format(epoch_num, unseen_site_idx), file=f)
-            dice, dice_array, haus, haus_array = test(unseen_site_idx, net_clients[unseen_site_idx])
-            print(("clinet OD dice is: {}, std is {}".format(dice, np.std(dice_array[:]))))
+            if args.num_classes==2:
+                dice_avg, eiou_avg, dice_avg_cup, eiou_avg_cup=validation(net_clients[unseen_site_idx])
+                print(("Validation OD dice is: {}, OD IOU is {}, OC dice is: {}, OC IOU is {}".format(dice_avg,eiou_avg, dice_avg_cup, eiou_avg_cup)),file=f)
+                dice_avg, eiou_avg, dice_avg_cup, eiou_avg_cup= test(unseen_site_idx, net_clients[unseen_site_idx])
+                print(("Test OD dice is: {}, OD IOU is {}, OC dice is: {}, OC IOU is {}".format(dice_avg,eiou_avg, dice_avg_cup, eiou_avg_cup)),file=f)
+            else:
+                dice_avg, eiou_avg=validation(net_clients[unseen_site_idx])
+                print(("Validation OD dice is: {}, IOU is {}".format(dice_avg,eiou_avg)),file=f)
+                dice_avg, eiou_avg= test(unseen_site_idx, net_clients[unseen_site_idx])
+                print(("Test OD dice is: {}, IOU is {}".format(dice_avg,eiou_avg)),file=f)
             # print(("   OC dice is: {}, std is {}".format(dice[1], np.std(dice_array[:, 1]))), file=f)
             
         ## save model

@@ -1,0 +1,4 @@
+python ./train_fed_unet_gpu0.py --data Fundus --unseen_site 0 --gpu 0 --batch_size 15 --exp Fundus-unet-0 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" --max_epoch 100 --num_classes 2 # 2>&1 | tee log.log
+python ./train_fed_unet_gpu0.py --data Fundus --unseen_site 1 --gpu 0 --batch_size 15 --exp Fundus-unet-1 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" --max_epoch 100 --num_classes 2 # 2>&1 | tee log.log
+python ./train_fed_unet_gpu0.py --data Fundus --unseen_site 2 --gpu 0 --batch_size 15 --exp Fundus-unet-2 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" --max_epoch 100 --num_classes 2 # 2>&1 | tee log.log
+python ./train_fed_unet_gpu0.py --data Fundus --unseen_site 3 --gpu 0 --batch_size 15 --exp Fundus-unet-3 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" --max_epoch 100 --num_classes 2 # 2>&1 | tee log.log
