@@ -270,6 +270,63 @@ def save_image(mask_data,name='pred'):
     mask_show=mask_show*255
     image_save = Image.fromarray(mask_show).convert("RGB")
     image_save.save("../output/output-fundus-cup-{}.jpg".format(name))
+def draw_result(image,mask):
+
+    # 假设 mask 是一个 (256, 256) 的 NumPy 数组
+    # mask = np.random.randint(0, 2, size=(256, 256))
+
+    # 将 mask 调整为 (1024, 1024)
+    resized_mask = np.array(Image.fromarray(mask).resize((1024, 1024), Image.NEAREST))
+
+    # 在 image 上绘制轮廓线
+    # image = np.random.randint(0, 255, size=(1024, 1024, 3), dtype=np.uint8)  # 假设 image 是一个 (1024, 1024, 3) 的 NumPy 数组
+    contours, _ = cv2.findContours(resized_mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    image_with_contours = cv2.drawContours(image.copy(), contours, -1, (0, 255, 0), 2)
+
+    # 保存绘制了轮廓线的图像
+    cv2.imwrite('./output/funduscontours_image.jpg', image_with_contours)
+def draw_fundus_result(image,oc_mask,od_mask):
+    # 假设 oc_mask 和 od_mask 是两个 (256, 256) 的 NumPy 数组
+    # oc_mask = np.random.randint(0, 2, size=(256, 256))
+    # od_mask = np.random.randint(0, 2, size=(256, 256))
+    oc_mask[oc_mask>=0.5]=1
+    oc_mask[oc_mask<0.5]=0
+    oc_mask = oc_mask.astype(np.uint8)*255
+    od_mask[od_mask>=0.5]=1
+    od_mask[od_mask<0.5]=0
+    od_mask = od_mask.astype(np.uint8)*255
+    # print(oc_mask[oc_mask>0])
+    '''
+    oc_mask=(oc_mask*255).astype(np.uint8)
+    od_mask=(od_mask*255).astype(np.uint8)
+    print(oc_mask)
+    '''
+    # 将 oc_mask 和 od_mask 调整为 (1024, 1024)
+    resized_oc_mask = cv2.resize(oc_mask, (1024, 1024), interpolation=cv2.INTER_NEAREST)
+    resized_od_mask = cv2.resize(od_mask, (1024, 1024), interpolation=cv2.INTER_NEAREST)
+
+    # 使用 Canny 边缘检测获取轮廓线
+    oc_edges = cv2.Canny(resized_oc_mask, 30, 100)
+    od_edges = cv2.Canny(resized_od_mask, 30, 100)
+
+    # 对边缘进行平滑处理
+    oc_edges_smooth = cv2.GaussianBlur(oc_edges, (5, 5), 0)
+    od_edges_smooth = cv2.GaussianBlur(od_edges, (5, 5), 0)
+
+    # 将 image 转为 uint8 类型
+    # image = np.random.randint(0, 255, size=(1024, 1024, 3), dtype=np.uint8)  # 假设 image 是一个 (1024, 1024, 3) 的 NumPy 数组
+
+    # 绘制 oc_mask 和 od_mask 的轮廓线
+    image_with_contours = image.copy()
+    image_with_contours = cv2.cvtColor(image_with_contours, cv2.COLOR_BGR2RGB)
+    contours_oc, _ = cv2.findContours(oc_edges_smooth, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours_od, _ = cv2.findContours(od_edges_smooth, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(image_with_contours, contours_oc, -1, (0, 255, 0), 2)  # oc_mask 的轮廓线颜色为绿色
+    cv2.drawContours(image_with_contours, contours_od, -1, (0, 0, 255), 2)  # od_mask 的轮廓线颜色为红色
+
+    # 保存绘制了轮廓线的图像
+    cv2.imwrite('/mnt/diskB/lyx/FedSAM/output/fundus1e-4-0/contours_image.jpg', image_with_contours)
+
 def test(site_index, test_net):
 
     test_data_list = client_data_list[site_index]
@@ -337,6 +394,9 @@ def test(site_index, test_net):
         threshold = (0.1, 0.3, 0.5, 0.7, 0.9)
         
         temp = eval_seg(pred, mask, threshold)
+        oc_od=pred.detach().cpu().numpy()[0,:,:,:]
+        # oc_od=mask.detach().cpu().numpy()[0,:,:,:]
+        draw_fundus_result(np.load(filename),oc_od[1,:,:],oc_od[0,:,:])
         # save_image(pred.detach().cpu().numpy(),'pred')
         # save_image(mask.detach().cpu().numpy(),'mask')
         '''
@@ -476,7 +536,7 @@ if __name__ == "__main__":
     # start federated learning
     writer = SummaryWriter(snapshot_path+'/log')
     lr_ = base_lr
-    # test(unseen_site_idx, net_clients[unseen_site_idx])
+    test(unseen_site_idx, net_clients[unseen_site_idx])
     # validation(net_clients[unseen_site_idx])
     for epoch_num in tqdm(range(start_epoch,max_epoch), ncols=70):
         # update_global_model(net_clients, client_weight)

@@ -177,6 +177,7 @@ def val(site_index, test_net):
         mask_data = np.load(filename.replace("data", "label"))
         image = np.expand_dims(data[..., :3].transpose(2, 0, 1), axis=0)
         mask = np.expand_dims(mask_data.transpose(2, 0, 1), axis=0)
+        # show_element(mask)
         image = torch.from_numpy(image).float().cuda(GPUdevice)
         mask = torch.from_numpy(mask).cuda(GPUdevice)
         # mask_data=mask_data[:,:,0]# np.squeeze(mask_data)
@@ -260,6 +261,104 @@ def validation(test_net):
     else:
         logging.info("Averagy validation: OD dice_avg %.4f, Eiou %.4f" % (dice_avg, eiou_avg))
         return dice_avg, eiou_avg
+def save_image(mask_data,name='pred'):
+    mask_show= mask_data[0,0,:,:].copy()
+    mask_show=mask_show*255
+    image_save = Image.fromarray(mask_show).convert("RGB")
+    image_save.save("../output/output-fundus-disc-{}.jpg".format(name))
+    mask_show= mask_data[0,1,:,:].copy()
+    mask_show=mask_show*255
+    image_save = Image.fromarray(mask_show).convert("RGB")
+    image_save.save("../output/output-fundus-cup-{}.jpg".format(name))
+def draw_fundus_result(image,oc_mask,od_mask,filename):
+    dir_name = '/mnt/diskB/lyx/FedSAM/output/{}/figure-msa'.format(args.exp)
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name)
+    # 假设 oc_mask 和 od_mask 是两个 (256, 256) 的 NumPy 数组
+    # oc_mask = np.random.randint(0, 2, size=(256, 256))
+    # od_mask = np.random.randint(0, 2, size=(256, 256))
+    oc_mask[oc_mask>=0.5]=1
+    oc_mask[oc_mask<0.5]=0
+    oc_mask = oc_mask.astype(np.uint8)*255
+    od_mask[od_mask>=0.5]=1
+    od_mask[od_mask<0.5]=0
+    od_mask = od_mask.astype(np.uint8)*255
+    # print(oc_mask[oc_mask>0])
+    '''
+    oc_mask=(oc_mask*255).astype(np.uint8)
+    od_mask=(od_mask*255).astype(np.uint8)
+    print(oc_mask)
+    '''
+    # 将 oc_mask 和 od_mask 调整为 (1024, 1024)
+    resized_oc_mask = cv2.resize(oc_mask, (512, 512), interpolation=cv2.INTER_NEAREST)
+    resized_od_mask = cv2.resize(od_mask, (512, 512), interpolation=cv2.INTER_NEAREST)
+    # resized_oc_mask = oc_mask
+    # resized_od_mask = od_mask
+    
+    # 使用 Canny 边缘检测获取轮廓线
+    oc_edges = cv2.Canny(resized_oc_mask, 30, 100)
+    od_edges = cv2.Canny(resized_od_mask, 30, 100)
+
+    # 对边缘进行平滑处理
+    oc_edges_smooth = cv2.GaussianBlur(oc_edges, (5, 5), 0)
+    od_edges_smooth = cv2.GaussianBlur(od_edges, (5, 5), 0)
+
+    # 将 image 转为 uint8 类型
+    # image = np.random.randint(0, 255, size=(1024, 1024, 3), dtype=np.uint8)  # 假设 image 是一个 (1024, 1024, 3) 的 NumPy 数组
+
+    # 绘制 oc_mask 和 od_mask 的轮廓线
+    image_with_contours = image.copy()
+    image_with_contours = cv2.cvtColor(image_with_contours, cv2.COLOR_BGR2RGB)
+    # cv2.imwrite('/mnt/diskB/lyx/FedSAM/output/fundus1e-4-1/figure/{}-image.jpg'.format(filename), image_with_contours)
+    image_with_contours = cv2.resize(image_with_contours, (512, 512))
+    contours_oc, _ = cv2.findContours(oc_edges_smooth, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours_od, _ = cv2.findContours(od_edges_smooth, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(image_with_contours, contours_oc, -1, (0, 255, 0), 2)  # oc_mask 的轮廓线颜色为绿色
+    cv2.drawContours(image_with_contours, contours_od, -1, (0, 0, 255), 2)  # od_mask 的轮廓线颜色为红色
+    # 保存绘制了轮廓线的图像
+    cv2.imwrite('/mnt/diskB/lyx/FedSAM/output/{}/figure-msa/{}-Contours.jpg'.format(args.exp,filename), image_with_contours)
+
+def draw_result(image,oc_mask,filename):
+    dir_name = '/mnt/diskB/lyx/FedSAM/output/{}/figure-msa'.format(args.exp)
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name)
+    # 假设 oc_mask 和 od_mask 是两个 (256, 256) 的 NumPy 数组
+    # oc_mask = np.random.randint(0, 2, size=(256, 256))
+    # od_mask = np.random.randint(0, 2, size=(256, 256))
+    oc_mask[oc_mask>=0.5]=1
+    oc_mask[oc_mask<0.5]=0
+    oc_mask = oc_mask.astype(np.uint8)*255
+    # print(oc_mask[oc_mask>0])
+    '''
+    oc_mask=(oc_mask*255).astype(np.uint8)
+    od_mask=(od_mask*255).astype(np.uint8)
+    print(oc_mask)
+    '''
+    # 将 oc_mask 和 od_mask 调整为 (1024, 1024)
+    resized_oc_mask = cv2.resize(oc_mask, (512, 512), interpolation=cv2.INTER_NEAREST)
+    # resized_oc_mask = oc_mask
+    # resized_od_mask = od_mask
+    
+    # 使用 Canny 边缘检测获取轮廓线
+    oc_edges = cv2.Canny(resized_oc_mask, 30, 100)
+
+    # 对边缘进行平滑处理
+    # oc_edges_smooth = cv2.GaussianBlur(oc_edges, (5, 5), 0)
+    oc_edges_smooth = oc_edges
+    # 将 image 转为 uint8 类型
+    # image = np.random.randint(0, 255, size=(1024, 1024, 3), dtype=np.uint8)  # 假设 image 是一个 (1024, 1024, 3) 的 NumPy 数组
+
+    # 绘制 oc_mask 和 od_mask 的轮廓线
+    image_with_contours = image.copy()
+    # print(image_with_contours.shape)
+    image_with_contours = image_with_contours.astype(np.uint8)
+    image_with_contours = cv2.cvtColor(image_with_contours, cv2.COLOR_BGR2RGB)
+    # cv2.imwrite('/mnt/diskB/lyx/FedSAM/output/{}/figure/{}-image.jpg'.format(args.exp,filename), image_with_contours)
+    image_with_contours = cv2.resize(image_with_contours, (512, 512))
+    contours_oc, _ = cv2.findContours(oc_edges_smooth, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(image_with_contours, contours_oc, -1, (255, 0, 0), 2)  # oc_mask 的轮廓线颜色为绿色
+    # 保存绘制了轮廓线的图像
+    cv2.imwrite('/mnt/diskB/lyx/FedSAM/output/{}/figure-msa/{}-Contours.jpg'.format(args.exp,filename), image_with_contours)
 
 def test(site_index, test_net):
 
@@ -272,14 +371,18 @@ def test(site_index, test_net):
     # print(test_data_list)
     test_net.eval()
     ave_res, mix_res = (0,0,0,0), (0,0,0,0)
+    # print('test',site_index,len(test_data_list))
+    count = 0
     for fid, filename in enumerate(test_data_list):
-        # print(fid)s
+        count+=1
+        # print(fid)
         data = np.load(filename)/ 255.0
         # print('data',data)
         mask_data = np.load(filename.replace("data", "label"))
         # why expand_dims?
         image = np.expand_dims(data[..., :3].transpose(2, 0, 1), axis=0)
         mask = np.expand_dims(mask_data.transpose(2, 0, 1), axis=0)
+        # show_element(mask)
         # print('mask_data.shape,mask.shape',mask_data.shape,mask.shape)
         # mask在另外一个地方文件夹。。。
         image = torch.from_numpy(image).float()
@@ -322,13 +425,30 @@ def test(site_index, test_net):
             dense_prompt_embeddings=de, 
             multimask_output=False,
         )
+        # print('pred.shape,mask.shape',pred.shape,mask.shape)
         threshold = (0.1, 0.3, 0.5, 0.7, 0.9)
         
         temp = eval_seg(pred, mask, threshold)
+        if args.num_classes==2:
+            oc_od=pred.detach().cpu().numpy()[0,:,:,:]
+            draw_fundus_result(np.load(filename),oc_od[1,:,:],oc_od[0,:,:],os.path.basename(filename)+'-pred')
+            # oc_od=mask.detach().cpu().numpy()[0,:,:,:]
+            # draw_fundus_result(np.load(filename),oc_od[1,:,:],oc_od[0,:,:],os.path.basename(filename)+'-label')
+        else:
+            oc_od=pred.detach().cpu().numpy()[0,:,:,:]
+            # print(oc_od.shape)
+            draw_result(np.load(filename),oc_od[0,:,:],os.path.basename(filename)+'-pred')
+            # oc_od=mask.detach().cpu().numpy()[0,:,:,:]
+            # draw_result(np.load(filename),oc_od[0,:,:],os.path.basename(filename)+'-label')
+        # save_image(pred.detach().cpu().numpy(),'pred')
+        # save_image(mask.detach().cpu().numpy(),'mask')
+        if count > 30:
+            break
         '''
         eiou, edice = temp
         dice_array.append(edice)
         eiou_array.append(eiou)
+        
         
     dice_array = np.array(dice_array)
     eiou_array = np.array(eiou_array)
@@ -423,7 +543,7 @@ if __name__ == "__main__":
                                 ToTensor(),
                                 ]),client_name=client_name)
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True,  num_workers=4, pin_memory=True, worker_init_fn=worker_init_fn)
-        net = sam_model_registry[args.sam_type](args,checkpoint=None).to(GPUdevice)# Unet2D(num_classes=1)
+        net = sam_model_registry[args.sam_type](args,checkpoint=args.sam_ckpt).to(GPUdevice)# Unet2D(num_classes=1)
         start_epoch=0
         if args.weights != 0:
             print(f'=> resuming from {args.weights}')
@@ -435,9 +555,27 @@ if __name__ == "__main__":
             start_epoch = args.start_epoch
             # best_tol = checkpoint['best_tol']
             
-            net.load_state_dict(checkpoint,strict=False)
+            net.load_state_dict(checkpoint['state_dict'])#,strict=False)
             # optimizer.load_state_dict(checkpoint['optimizer'], strict=False)
             print(f'=> loaded checkpoint {checkpoint_file} (epoch {start_epoch})')
+        '''
+        if args.weights != 0:
+            print(f'=> resuming from {args.weights}')
+            assert os.path.exists(args.weights)
+            checkpoint_file = os.path.join(args.weights)
+            assert os.path.exists(checkpoint_file)
+            loc = 'cuda:{}'.format(args.gpu_device)
+            checkpoint = torch.load(checkpoint_file, map_location=loc)
+            start_epoch = checkpoint['epoch']
+            best_tol = checkpoint['best_tol']
+            
+            net.load_state_dict(checkpoint['state_dict'],strict=False)
+            # optimizer.load_state_dict(checkpoint['optimizer'], strict=False)
+
+            args.path_helper = checkpoint['path_helper']
+            logger = create_logger(args.path_helper['log_path'])
+            print(f'=> loaded checkpoint {checkpoint_file} (epoch {start_epoch})')
+        '''
         # net = nn.DataParallel(net, device_ids=device_list) 
         # net = net.cuda()
         # net = net.cuda(GPUdevice)
@@ -462,8 +600,9 @@ if __name__ == "__main__":
     # start federated learning
     writer = SummaryWriter(snapshot_path+'/log')
     lr_ = base_lr
-    # test(unseen_site_idx, net_clients[unseen_site_idx])
+    test(unseen_site_idx, net_clients[unseen_site_idx])
     # validation(net_clients[unseen_site_idx])
+    exit(0)
     for epoch_num in tqdm(range(start_epoch,max_epoch), ncols=70):
         # update_global_model(net_clients, client_weight)
         for client_idx in source_site_idx:
@@ -502,11 +641,9 @@ if __name__ == "__main__":
                 # print('parameters_name',net_current.image_encoder.named_parameters())
                 parameters_to_calculate_grad = []
                 parameters_name_to_calculate_grad = []
-                '''
                 for n, value in net_current.image_encoder.named_parameters():
                     if "Adapter" not in n:
                         value.requires_grad = False
-                '''
                 # batch_size, out_chans=256, H', W', 感觉out_chans可以小一点
                 volume_batch_raw_encoded= net_current.image_encoder(volume_batch_raw)
                 outputs_soft_inner, masks_inner_embedding, _ = net_current.mask_decoder(
@@ -519,6 +656,7 @@ if __name__ == "__main__":
                 # print("outputs_soft_inner.shape,label_batch.shape",outputs_soft_inner.shape,label_batch.shape)
                 # loss_inner = F.binary_cross_entropy_with_logits(outputs_soft_inner, label_batch)
                 loss_inner = lossfunc(outputs_soft_inner, label_batch) #dice
+                # loss_inner = dice_loss(outputs_soft_inner, label_batch)
                 total_loss = loss_inner
 
                 optimizer_current.zero_grad()
