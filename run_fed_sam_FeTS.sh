@@ -1,1 +1,9 @@
-python ./train_fed_sam.py --unseen_site 8 --gpu 2 --batch_size 4 --exp FeTS1e-4 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" # 2>&1 | tee log.log
+python ./train_fed_sam.py --unseen_site 0 --gpu 1 --batch_size 8 --exp FeTS-new-0 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" --max_epoch 40
+python ./train_fed_sam.py --unseen_site 1 --gpu 1 --batch_size 8 --exp FeTS-new-1 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" --max_epoch 40
+python ./train_fed_sam.py --unseen_site 2 --gpu 1 --batch_size 8 --exp FeTS-new-2 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" --max_epoch 40
+python ./train_fed_sam.py --unseen_site 3 --gpu 1 --batch_size 8 --exp FeTS-new-3 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" --max_epoch 40
+# python ./train_fed_sam.py --unseen_site 6 --gpu 5 --batch_size 8 --exp FeTS1e-4-6 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" --max_epoch 40
+# python ./train_fed_sam.py --unseen_site 5 --gpu 5 --batch_size 8 --exp FeTS1e-4-5 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" --max_epoch 40
+# python ./train_fed_sam.py --unseen_site 0 --gpu 3 --batch_size 4 --exp FeTS1e-4-0 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" --max_epoch 60 # 2>&1 | tee log.log
+# python ./train_fed_sam.py --unseen_site 4 --gpu 3 --batch_size 4 --exp FeTS1e-4-4 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" --max_epoch 60 # 2>&1 | tee log.log
+# python ./train_fed_sam.py --unseen_site 8 --gpu 3 --batch_size 4 --exp FeTS1e-4 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" --max_epoch 60 # 2>&1 | tee log.log
