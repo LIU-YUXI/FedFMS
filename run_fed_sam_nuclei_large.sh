@@ -1,7 +1,0 @@
-python ./train_fed_sam.py --data Nuclei --unseen_site 0 --gpu 0 --batch_size 2 --exp nuclei-new-large-0 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/SAM/sam_vit_l_0b3195.pth"  --sam_type 'vit_l' # 2>&1 | tee log.log
-python ./train_fed_sam.py --data Nuclei --unseen_site 1 --gpu 0 --batch_size 2 --exp nuclei-new-large-1 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/SAM/sam_vit_l_0b3195.pth"  --sam_type 'vit_l' # 2>&1 | tee log.log
-python ./train_fed_sam.py --data Nuclei --unseen_site 2 --gpu 0 --batch_size 2 --exp nuclei-new-large-2 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/SAM/sam_vit_l_0b3195.pth"  --sam_type 'vit_l' # 2>&1 | tee log.log
-python ./train_fed_sam.py --data Nuclei --unseen_site 3 --gpu 0 --batch_size 2 --exp nuclei-new-large-3 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/SAM/sam_vit_l_0b3195.pth"  --sam_type 'vit_l' # 2>&1 | tee log.log
-python ./train_fed_sam.py --data Nuclei --unseen_site 4 --gpu 0 --batch_size 2 --exp nuclei-new-large-4 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/SAM/sam_vit_l_0b3195.pth"  --sam_type 'vit_l' # 2>&1 | tee log.log
-python ./train_fed_sam.py --data Nuclei --unseen_site 5 --gpu 0 --batch_size 2 --exp nuclei-new-large-5 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/SAM/sam_vit_l_0b3195.pth"  --sam_type 'vit_l' # 2>&1 | tee log.log
-python ./train_fed_sam.py --data Nuclei --unseen_site 6 --gpu 0 --batch_size 2 --exp nuclei-new-large-6 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/SAM/sam_vit_l_0b3195.pth"  --sam_type 'vit_l' # 2>&1 | tee log.log

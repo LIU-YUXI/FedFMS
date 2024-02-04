@@ -1,4 +1,0 @@
-python ./train_fed_sam_wopretrain.py  --unseen_site 0 --gpu 1 --batch_size 3 --exp Fets-1e-4-0-wp --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" --num_classes 1 --max_epoch 40 # 2>&1 | tee log.log
-python ./train_fed_sam_wopretrain.py  --unseen_site 8 --gpu 1 --batch_size 3 --exp Fets-1e-4-8-wp --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" --num_classes 1 --max_epoch 40 # 2>&1 | tee log.log
-python ./train_fed_sam_wopretrain.py  --unseen_site 6 --gpu 1 --batch_size 3 --exp Fets-1e-4-6-wp --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" --num_classes 1 --max_epoch 40 # 2>&1 | tee log.log
-python ./train_fed_sam_wopretrain.py  --unseen_site 3 --gpu 1 --batch_size 3 --exp Fets-1e-4-3-wp --base_lr 1e-4 --sam_ckpt "/mnt/diskB/lyx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" --num_classes 1 --max_epoch 40 # 2>&1 | tee log.log

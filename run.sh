@@ -1,1 +1,0 @@
-python ./train_ELCFS_sam.py --gpu 3 --batch_size 1 --sam_ckpt "/mnt/diskB/lyx/FedSAM-main/FedSAM/SAM/sam_vit_b_01ec64.pth" # 2>&1 | tee log.log
