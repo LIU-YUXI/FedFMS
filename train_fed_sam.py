@@ -66,16 +66,16 @@ display_freq = args.display_freq
 # ？？？
 # client_name = ['1', '4', '5', '6', '13', '16', '18', '20', '21']
 client_name = ['1', '6', '18', '21']
-data_path = '/mnt/diskB/lyx/FeTS2022_FedDG_1024'
+data_path = '/mnt/diskB/name/FeTS2022_FedDG_1024'
 if args.data=='Prostate':
     client_name =  ['BIDMC', 'HK', 'I2CVB', 'ISBI', 'ISBI_1.5', 'UCL']
-    data_path = '/mnt/diskB/lyx/Prostate_processed_1024'
+    data_path = '/mnt/diskB/name/Prostate_processed_1024'
 elif args.data=='Fundus':
     # client_name =  ['G1020', 'ORIGA', 'REFUGE','Drishti-GS1']# ,'RIM-ONE'
     client_name =  ['REFUGE', 'ORIGA','G1020','Drishti-GS1']# ,'RIM-ONE',
     # client_name =  ['RIM-ONE','Drishti-GS1']# ,
     # Drishti不是1,'RIM-ONE'也不是
-    data_path = '/mnt/diskB/lyx/Fundus_1024'
+    data_path = '/mnt/diskB/name/Fundus_1024'
 elif args.data=='Nuclei':
     # client_name = ['MoNuSAC2018','PanNuke2','PanNuke3','TNBC','MoNuSAC2020']
     #client_name = ['TNBC','MoNuSAC2018','MoNuSAC2020']# ,'PanNuke3','PanNuke2'
@@ -83,10 +83,10 @@ elif args.data=='Nuclei':
     # client_name = ['PanNuke2Adrenal_gland','PanNuke2Esophagus', 'PanNuke3Testis', 'PanNuke3Kidney', 'PanNuke2Thyroid','PanNuke2Liver','PanNuke3Skin','PanNuke3Uterus','MoNuSAC2020','TNBC','MoNuSAC2018']
     # client_name = ['PanNuke2Adrenal_gland','PanNuke2Esophagus', 'PanNuke3Testis', 'PanNuke3Kidney', 'MoNuSAC2020','TNBC','MoNuSAC2018']
     client_name = ['PanNuke2Adrenal_gland','PanNuke2Esophagus', 'PanNuke3Bile-duct','PanNuke3Uterus', 'MoNuSAC2020','TNBC','MoNuSAC2018']
-    data_path = '/mnt/diskB/lyx/Nuclei_1024'
+    data_path = '/mnt/diskB/name/Nuclei_1024'
 elif args.data=='CTLung':
     client_name = ['1', '2', '3', '4', '5']
-    data_path = '/mnt/diskB/lyx/CTLung_1024'
+    data_path = '/mnt/diskB/name/CTLung_1024'
 # 还要生成test数据
 client_num = len(client_name)
 client_data_list = []
@@ -137,10 +137,14 @@ else:
 def update_global_model(net_clients, client_weight):
     # client_num=4
     # Use the true average until the exponential average is more correct
+    # param.requires_grad
     for param in zip(*list(net_clients[i].parameters() for i in range(client_num))):
+    # for param in zip(*[p for p in (list(net_clients[i].parameters()) for i in range(client_num)) if p.requires_grad]):
     #for param in zip(net_clients[0].parameters(), net_clients[1].parameters(), 
     #                 net_clients[2].parameters(), net_clients[3].parameters()):
         # print(param,param[0])
+        if param[0].requires_grad is False:
+            continue
         new_para = Variable(torch.Tensor(np.zeros(param[0].shape)), requires_grad=False).cuda(GPUdevice) 
         for i in range(client_num):
             new_para.data.add_(client_weight[i], param[i].data)
@@ -494,6 +498,7 @@ if __name__ == "__main__":
     lr_ = base_lr
     # test(unseen_site_idx, net_clients[unseen_site_idx])
     # validation(net_clients[unseen_site_idx])
+    update_global_model(net_clients, client_weight)
     for epoch_num in tqdm(range(start_epoch,max_epoch), ncols=70):
         # update_global_model(net_clients, client_weight)
         for client_idx in source_site_idx:

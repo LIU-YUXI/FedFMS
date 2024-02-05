@@ -7,8 +7,8 @@ from PIL import Image
 # client_name = ['RIM-ONE','G1020', 'ORIGA', 'REFUGE','Drishti-GS1']
 client_name = ['Drishti-GS1']
 client_num = len(client_name)
-data_path = '/mnt/diskB/lyx/Fundus'
-target_path = '/mnt/diskB/lyx/Fundus_1024'
+data_path = '/mnt/diskB/name/Fundus'
+target_path = '/mnt/diskB/name/Fundus_1024'
 if not os.path.exists(target_path):
     os.makedirs(target_path)
 # 还要生成test数据

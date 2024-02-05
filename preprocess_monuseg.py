@@ -5,8 +5,8 @@ import os
 from glob import glob
 from PIL import Image
 client_name = 'MoNuSAC2018'
-data_path = '/mnt/diskB/lyx/Monuseg2018/kmms_training/kmms_training'
-target_path = '/mnt/diskB/lyx/Nuclei_1024'
+data_path = '/mnt/diskB/name/Monuseg2018/kmms_training/kmms_training'
+target_path = '/mnt/diskB/name/Nuclei_1024'
 if not os.path.exists(target_path):
     os.makedirs(target_path)
 dir_name = '{}/{}/data_npy/'.format(target_path,client_name)

@@ -3,16 +3,16 @@ import numpy  as np
 import cv2
 import os
 client_name = 'PanNuke2'
-data_path = '/mnt/diskB/lyx/PanNuke2'
-target_path = '/mnt/diskB/lyx/Nuclei_1024'
+data_path = '/mnt/diskB/name/PanNuke2'
+target_path = '/mnt/diskB/name/Nuclei_1024'
 if not os.path.exists(target_path):
     os.makedirs(target_path)
-types = np.load('/mnt/diskB/lyx/PanNuke2/Images/types.npy')
+types = np.load('/mnt/diskB/name/PanNuke2/Images/types.npy')
 print(types)
-images = np.load('/mnt/diskB/lyx/PanNuke2/Images/images.npy')
+images = np.load('/mnt/diskB/name/PanNuke2/Images/images.npy')
 file_number = len(images)
 print(len(images))
-masks = np.load('/mnt/diskB/lyx/PanNuke2/Masks/masks.npy')
+masks = np.load('/mnt/diskB/name/PanNuke2/Masks/masks.npy')
 print(len(masks))
 '''
 dir_name = '{}/{}/data_npy/'.format(target_path,client_name)

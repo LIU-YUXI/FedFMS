@@ -134,8 +134,8 @@ class Brain(object):
         channels = {'1':3, '4':3, '5':3, '6':3, '13':3, '16':3, '18':3, '20':3, '21':3}
         assert site in list(channels.keys())
         self.split = split
-        base_path = base_path if base_path is not None else'/mnt/diskB/lyx/FeTS2022'
-        save_base_path = '/mnt/diskB/lyx/FeTS2022_FedDG_1024'
+        base_path = base_path if base_path is not None else'/mnt/diskB/name/FeTS2022'
+        save_base_path = '/mnt/diskB/name/FeTS2022_FedDG_1024'
         sitedir = os.path.join(base_path, site)
         save_sitedir = os.path.join(save_base_path, site)
         imgsdir = os.path.join(sitedir, 'images')

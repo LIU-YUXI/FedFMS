@@ -8,8 +8,8 @@ from glob import glob
 from PIL import Image
 client_name = ['1', '2', '3', '4', '5']
 client_num = len(client_name)
-data_path = '/mnt/diskB/lyx/CTLung'
-target_path = '/mnt/diskB/lyx/CTLung_1024'
+data_path = '/mnt/diskB/name/CTLung'
+target_path = '/mnt/diskB/name/CTLung_1024'
 if not os.path.exists(target_path):
     os.makedirs(target_path)
 # 还要生成test数据

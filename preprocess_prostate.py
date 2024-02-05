@@ -5,8 +5,8 @@ import cv2
 import os
 client_name = ['BIDMC', 'HK', 'I2CVB', 'ISBI', 'ISBI_1.5', 'UCL']
 client_num = len(client_name)
-data_path = '/mnt/diskB/lyx/Prostate_processed/'
-target_path = '/mnt/diskB/lyx/Prostate_processed_1024'
+data_path = '/mnt/diskB/name/Prostate_processed/'
+target_path = '/mnt/diskB/name/Prostate_processed_1024'
 if not os.path.exists(target_path):
     os.makedirs(target_path)
 # 还要生成test数据
@@ -26,7 +26,7 @@ for client_idx in range(client_num):
         os.makedirs(label_dir_name)
     for fid, filename in enumerate(client_data_list[client_idx]):
         # 读取.nii.gz文件
-        nii_file_path = filename# '/mnt/diskB/lyx/Prostate_processed/Prostate_processed/BIDMC/images/Case02.nii.gz'
+        nii_file_path = filename# '/mnt/diskB/name/Prostate_processed/Prostate_processed/BIDMC/images/Case02.nii.gz'
         img = nib.load(nii_file_path)
         # 获取图像数据
         img_data = img.get_fdata()

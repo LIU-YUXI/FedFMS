@@ -2,11 +2,11 @@ import os
 import shutil
 '''
 # 源文件夹路径
-source_folder = '/mnt/diskB/lyx/TNBC_NucleiSegmentation'
+source_folder = '/mnt/diskB/name/TNBC_NucleiSegmentation'
 
 # 目标文件夹路径
-target_folder_slide = '/mnt/diskB/lyx/TNBC/images'
-target_folder_gt = '/mnt/diskB/lyx/TNBC/labels'
+target_folder_slide = '/mnt/diskB/name/TNBC/images'
+target_folder_gt = '/mnt/diskB/name/TNBC/labels'
 if not os.path.exists(target_folder_slide):
     os.makedirs(target_folder_slide)
 if not os.path.exists(target_folder_gt):
@@ -35,8 +35,8 @@ import os
 from glob import glob
 from PIL import Image
 client_name = 'TNBC'
-data_path = '/mnt/diskB/lyx/TNBC'
-target_path = '/mnt/diskB/lyx/Nuclei_1024'
+data_path = '/mnt/diskB/name/TNBC'
+target_path = '/mnt/diskB/name/Nuclei_1024'
 if not os.path.exists(target_path):
     os.makedirs(target_path)
 dir_name = '{}/{}/data_npy/'.format(target_path,client_name)
