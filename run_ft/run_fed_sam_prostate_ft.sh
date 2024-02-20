@@ -1,0 +1,6 @@
+python ./train_fed_sam_ft.py --data Prostate --unseen_site 0 --gpu 5 --batch_size 6 --exp prostate-ft-0 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/xxx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth"
+python ./train_fed_sam_ft.py --data Prostate --unseen_site 1 --gpu 5 --batch_size 6 --exp prostate-ft-1 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/xxx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth"
+python ./train_fed_sam_ft.py --data Prostate --unseen_site 2 --gpu 5 --batch_size 6 --exp prostate-ft-2 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/xxx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth"
+python ./train_fed_sam_ft.py --data Prostate --unseen_site 3 --gpu 5 --batch_size 6 --exp prostate-ft-3 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/xxx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth"
+python ./train_fed_sam_ft.py --data Prostate --unseen_site 4 --gpu 5 --batch_size 6 --exp prostate-ft-4 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/xxx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth"
+python ./train_fed_sam_ft.py --data Prostate --unseen_site 5 --gpu 5 --batch_size 6 --exp prostate-ft-5 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/xxx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth"

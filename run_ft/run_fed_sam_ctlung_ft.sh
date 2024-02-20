@@ -1,0 +1,5 @@
+python ./train_fed_sam_ft.py --data CTLung --unseen_site 0 --gpu 4 --batch_size 6 --exp CTLung-ft-0 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/xxx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" 
+python ./train_fed_sam_ft.py --data CTLung --unseen_site 1 --gpu 4 --batch_size 6 --exp CTLung-ft-1 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/xxx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" 
+python ./train_fed_sam_ft.py --data CTLung --unseen_site 2 --gpu 4 --batch_size 6 --exp CTLung-ft-2 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/xxx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" 
+python ./train_fed_sam_ft.py --data CTLung --unseen_site 3 --gpu 4 --batch_size 6 --exp CTLung-ft-3 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/xxx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" 
+python ./train_fed_sam_ft.py --data CTLung --unseen_site 4 --gpu 4 --batch_size 6 --exp CTLung-ft-4 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/xxx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" 

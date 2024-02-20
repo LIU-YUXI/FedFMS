@@ -1,0 +1,7 @@
+python ./train_fed_sam_ft.py --data Nuclei --unseen_site 0 --gpu 3 --batch_size 4 --exp nuclei-ft-0 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/xxx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" 
+python ./train_fed_sam_ft.py --data Nuclei --unseen_site 1 --gpu 3 --batch_size 4 --exp nuclei-ft-1 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/xxx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" 
+python ./train_fed_sam_ft.py --data Nuclei --unseen_site 2 --gpu 3 --batch_size 4 --exp nuclei-ft-2 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/xxx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" 
+python ./train_fed_sam_ft.py --data Nuclei --unseen_site 3 --gpu 3 --batch_size 4 --exp nuclei-ft-3 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/xxx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" 
+python ./train_fed_sam_ft.py --data Nuclei --unseen_site 4 --gpu 3 --batch_size 4 --exp nuclei-ft-4 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/xxx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" 
+python ./train_fed_sam_ft.py --data Nuclei --unseen_site 5 --gpu 3 --batch_size 4 --exp nuclei-ft-5 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/xxx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" 
+python ./train_fed_sam_ft.py --data Nuclei --unseen_site 6 --gpu 3 --batch_size 4 --exp nuclei-ft-6 --base_lr 1e-4 --sam_ckpt "/mnt/diskB/xxx/FedSAM/FedSAM/SAM/sam_vit_b_01ec64.pth" 
