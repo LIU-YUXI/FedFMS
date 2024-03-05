@@ -12,6 +12,14 @@ if not os.path.exists(target_path):
 # 还要生成test数据
 client_data_list = []
 slice_num =[]
+def convert_from_nii_to_png(img):
+    high = np.quantile(img,0.99)
+    low = np.min(img)
+    img = np.where(img > high, high, img)
+    lungwin = np.array([low * 1., high * 1.])
+    newimg = (img - lungwin[0]) / (lungwin[1] - lungwin[0])  
+    newimg = (newimg * 255).astype(np.uint8)
+    return newimg
 for client_idx in range(client_num):
     # print('{}/{}/data_npy/*'.format(data_path,client_name[client_idx]))
     client_data_list.append(glob('{}/{}/images/*'.format(data_path,client_name[client_idx])))
@@ -35,6 +43,7 @@ for client_idx in range(client_num):
         # 打印图像数据的形状
         # print("图像数据形状:", img_data.shape,label_data.shape)
         image_file_name = os.path.basename(filename)
+        img_data = convert_from_nii_to_png(img_data)
         for i in range(img_data.shape[-1]):
             gray_image = np.uint8(np.array(img_data[:,:,i]))
             rgb_image = cv2.cvtColor(gray_image, cv2.COLOR_GRAY2RGB)
