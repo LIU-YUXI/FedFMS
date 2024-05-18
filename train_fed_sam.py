@@ -114,16 +114,14 @@ def val(site_index, test_net):
     eiou_array_cup = []
     test_net.eval()
     for fid, filename in enumerate(val_data_list):
+        # The image and its mask are read in one at a time
         data = np.load(filename)/ 255.0
         mask_data = np.load(filename.replace("data", "label"))
         image = np.expand_dims(data[..., :3].transpose(2, 0, 1), axis=0)
         mask = np.expand_dims(mask_data.transpose(2, 0, 1), axis=0)
-        # show_element(mask)
         image = torch.from_numpy(image).float().cuda(GPUdevice)
         mask = torch.from_numpy(mask).cuda(GPUdevice)
-        # mask_data=mask_data[:,:,0]# np.squeeze(mask_data)
-        # mask_data=cv2.resize(mask_data,(image.shape[-1],image.shape[-1]),interpolation=cv2.INTER_NEAREST)
-        # pt = np.expand_dims(random_click(np.array(mask_data), 1, 1), axis=0)
+        # The embedding of prompt is removed in decoder, so pt is set to 0
         pt = np.expand_dims(np.array([0,0]), axis=0)
         point_labels = torch.ones(image.size(0))
         if point_labels[0] != -1:
@@ -146,8 +144,10 @@ def val(site_index, test_net):
             dense_prompt_embeddings=de, 
             multimask_output=False,
         )
+        # dice and iou are calculated by different thresholds
         threshold = (0.1, 0.3, 0.5, 0.7, 0.9)
         temp = eval_seg(pred, mask, threshold)
+        # fundus needs to segment out oc and od, so there are two pred result
         if(pred.shape[1]==2):
             iou_d, iou_c, disc_dice, cup_dice= temp
             dice_array.append(disc_dice)
@@ -158,12 +158,12 @@ def val(site_index, test_net):
             eiou, edice = temp
             dice_array.append(edice)
             eiou_array.append(eiou)
+    # Calculate the total result
     if args.num_classes==2:
         dice_array = np.array(dice_array)
         eiou_array = np.array(eiou_array)
         dice_array_cup = np.array(dice_array_cup)
         eiou_array_cup = np.array(eiou_array_cup)
-        # print (dice_array.shape)
         dice_avg = np.mean(dice_array, axis=0).tolist()
         eiou_avg = np.mean(eiou_array, axis=0).tolist()
         dice_avg_cup = np.mean(dice_array_cup, axis=0).tolist()
@@ -212,6 +212,7 @@ def save_image(mask_data,name='pred'):
     image_save = Image.fromarray(mask_show).convert("RGB")
     image_save.save("../output/output-fundus-cup-{}.jpg".format(name))
 # Test the data on unseensite using the aggregated global model
+# Test the data on unseensite using the aggregated global model
 def test(site_index, test_net):
 
     test_data_list = client_data_list[site_index]
@@ -222,42 +223,24 @@ def test(site_index, test_net):
     eiou_array_cup = []
     # print(test_data_list)
     test_net.eval()
-    ave_res, mix_res = (0,0,0,0), (0,0,0,0)
     # print('test',site_index,len(test_data_list))
     for fid, filename in enumerate(test_data_list):
-        # print(fid)
+        # The image and its mask are read in one at a time
         data = np.load(filename)/ 255.0
-        # print('data',data)
         mask_data = np.load(filename.replace("data", "label"))
         image = np.expand_dims(data[..., :3].transpose(2, 0, 1), axis=0)
         mask = np.expand_dims(mask_data.transpose(2, 0, 1), axis=0)
-        # show_element(mask)。
         image = torch.from_numpy(image).float()
         mask = torch.from_numpy(mask)
-        '''
-        # save mask
-        mask_show= mask_data[:,:,0].copy()
-        mask_show[mask_show==1]=255
-        image_save = Image.fromarray(mask_show)
-        image_save.save("../output/output-{}.jpg".format(client_name[unseen_site_idx]))
-        '''
-        # print('dmi',mask)
-        # print(mask_data.shape)
-        # mask_data=mask_data[:,:,0]# np.squeeze(mask_data)
-        # mask_data=cv2.resize(mask_data,(image.shape[-1],image.shape[-1]),interpolation=cv2.INTER_NEAREST)
-        # pt = np.expand_dims(random_click(np.array(mask_data), 1, 1), axis=0)
+        # The embedding of prompt is removed in decoder, so pt is set to 0
         pt = np.expand_dims(np.array([0,0]), axis=0)
-        # print('pt',pt)
         point_labels = torch.ones(image.size(0))
         if point_labels[0] != -1:
-            # point_coords = samtrans.ResizeLongestSide(longsize).apply_coords(pt, (h, w))
             point_coords = pt
             coords_torch = torch.as_tensor(point_coords, dtype=torch.float, device=GPUdevice)
             labels_torch = torch.as_tensor(point_labels, dtype=torch.int, device=GPUdevice)
             coords_torch, labels_torch = coords_torch[None, :, :], labels_torch[None, :]
             pt = (coords_torch, labels_torch)
-            # print('pt',pt[0].shape,pt[1].shape)
-            # imge= net.image_encoder(imgs)
         se, de = test_net.prompt_encoder(
             points=pt,
             boxes=None,
@@ -272,11 +255,10 @@ def test(site_index, test_net):
             dense_prompt_embeddings=de, 
             multimask_output=False,
         )
-        # print('pred.shape,mask.shape',pred.shape,mask.shape)
+        # dice and iou are calculated by different thresholds
         threshold = (0.1, 0.3, 0.5, 0.7, 0.9)
-        
         temp = eval_seg(pred, mask, threshold)
-
+        # fundus needs to segment out oc and od, so there are two pred result
         if(pred.shape[1]==2):
             iou_d, iou_c, disc_dice, cup_dice= temp
             dice_array.append(disc_dice)
@@ -287,12 +269,12 @@ def test(site_index, test_net):
             eiou, edice = temp
             dice_array.append(edice)
             eiou_array.append(eiou)
+    # Calculate the total result
     if args.num_classes==2:
         dice_array = np.array(dice_array)
         eiou_array = np.array(eiou_array)
         dice_array_cup = np.array(dice_array_cup)
         eiou_array_cup = np.array(eiou_array_cup)
-        # print (dice_array.shape)
         dice_avg = np.mean(dice_array, axis=0).tolist()
         eiou_avg = np.mean(eiou_array, axis=0).tolist()
         dice_avg_cup = np.mean(dice_array_cup, axis=0).tolist()
@@ -308,8 +290,6 @@ def test(site_index, test_net):
         logging.info("Test OD dice_avg %.4f, Eiou %.4f" % (dice_avg, eiou_avg))
         return dice_avg, eiou_avg
 
-
-
 def copy_outer_net(fast_weights,net_current):
     # Deep copy the net current model
     net_copy = copy.deepcopy(net_current)
@@ -318,7 +298,6 @@ def copy_outer_net(fast_weights,net_current):
         if name in fast_weights:
             param.data = fast_weights[name]
     return net_copy
-
 
 if __name__ == "__main__":
     ## make logger file
