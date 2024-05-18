@@ -20,15 +20,13 @@ def convert_from_nii_to_png(img):
     newimg = (img - lungwin[0]) / (lungwin[1] - lungwin[0])  
     newimg = (newimg * 255).astype(np.uint8)
     return newimg
-# 用这个把所有图片的幅度谱提取出来然后保存成npy
 def extract_amp_spectrum(trg_img):
 
-    fft_trg_np = np.fft.fft2( trg_img, axes=(-2, -1) )# 通过指定 axes=(-2, -1) 来对图像的最后两个维度进行傅里叶变换。
+    fft_trg_np = np.fft.fft2( trg_img, axes=(-2, -1) )
     amp_target, pha_trg = np.abs(fft_trg_np), np.angle(fft_trg_np)
 
-    return amp_target# 幅度谱
+    return amp_target
 
-# 通过在指定的截取窗口内，按照给定的比例交换本地图像和目标图像的幅度谱，从而实现频域上的插值操作。
 def amp_spectrum_swap( amp_local, amp_target, L=0.1 , ratio=0):
     
     a_local = np.fft.fftshift( amp_local, axes=(-2, -1) )
@@ -62,9 +60,9 @@ def freq_space_interpolation( local_img, amp_target, L=0 , ratio=0):
     amp_local_ = amp_spectrum_swap( amp_local, amp_target, L=L , ratio=ratio)
 
     # get transformed image via inverse fft
-    fft_local_ = amp_local_ * np.exp( 1j * pha_local )# 根据交换后的幅度谱和原始相位谱，重新构建频域表示 fft_local_。
-    local_in_trg = np.fft.ifft2( fft_local_, axes=(-2, -1) ) #逆傅里叶
-    local_in_trg = np.real(local_in_trg) # 将转换后的图像取实部，得到最终的插值结果。
+    fft_local_ = amp_local_ * np.exp( 1j * pha_local )
+    local_in_trg = np.fft.ifft2( fft_local_, axes=(-2, -1) )
+    local_in_trg = np.real(local_in_trg) 
 
     return local_in_trg
 
@@ -82,52 +80,6 @@ def load_image( infilename ) :
     img.load()
     data = np.asarray( img, dtype="int32" )
     return data
-'''
-im_local = Image.open("demo_samples/fundus_client4.jpg")
-im_trg_list = [Image.open("demo_samples/fundus_client1.png"),
-         Image.open("demo_samples/fundus_client2.jpg"),
-         Image.open("demo_samples/fundus_client3.jpg")]
-
-im_local = im_local.resize( (384,384), Image.BICUBIC )
-im_local = np.asarray(im_local, np.float32)
-im_local = im_local.transpose((2, 0, 1))
-
-plt.figure(figsize=(18,3))
-# 一一对应？
-for client_idx,im_trg in enumerate(im_trg_list):
-    im_trg = im_trg.resize( (384,384), Image.BICUBIC )
-    im_trg = np.asarray(im_trg, np.float32)
-    im_trg = im_trg.transpose((2, 0, 1))
-
-    L = 0.003
-
-    # visualize local data, target data, amplitude spectrum of target data
-    plt.figure(figsize=(18,3))
-    plt.subplot(1,8,1)
-    draw_image((im_local / 255).transpose((1, 2, 0)))    
-    plt.xlabel("Local Image", fontsize=12)
-
-    plt.subplot(1,8,2)
-    draw_image((im_trg / 255).transpose((1, 2, 0)))
-    plt.xlabel("Target Image (Client {})".format(client_idx), fontsize=12)
-    
-    # amplitude spectrum of target data
-    amp_target = extract_amp_spectrum(im_trg)
-    amp_target_shift = np.fft.fftshift( amp_target, axes=(-2, -1) )
-    
-    plt.subplot(1,8,3)
-    draw_image(np.clip((np.log(amp_target_shift)/ np.max(np.log(amp_target_shift))).transpose((1, 2, 0)), 0, 1))
-    plt.xlabel("Target Amp (Client {})".format(client_idx), fontsize=12)
-    
-    # continuous frequency space interpolation
-    for idx, i in enumerate([0.2, 0.4, 0.6, 0.8, 1.0]):
-        plt.subplot(1,8,idx+4)
-        local_in_trg = freq_space_interpolation(im_local, amp_target, L=L, ratio=1-i)
-        local_in_trg = local_in_trg.transpose((1,2,0))
-        draw_image((np.clip(local_in_trg / 255, 0, 1)))
-        plt.xlabel("Interpolation Rate: {}".format(i), fontsize=12)
-    plt.show()
-'''
 
 class Brain(object):
     def __init__(self, site, base_path=None, split='train', transform=None):
@@ -151,7 +103,7 @@ class Brain(object):
             os.makedirs(freqsdir)
         ossitedir = os.listdir(imgsdir) #np.load("../data/prostate/{}-dir.npy".format(site)).tolist()
         #print(ossitedir)
-        # np.random.seed(2023)  # 先定义一个随机数种子
+        # np.random.seed(2023)  
         lens = len(ossitedir)
         images, labels = [], []
         save_path, label_path, freq_path = [],[],[]
@@ -209,11 +161,10 @@ class Brain(object):
         label=cv2.resize(label, (256,256), interpolation=cv2.INTER_NEAREST)
         label = np.expand_dims(label.astype(np.int64),axis=-1)
         # print('image,label',image.shape,label.shape)
-        # 先把图片+mask通道的存一下
         # save_image=np.concatenate((image,label),axis=-1)
         np.save(self.savepathes[idx],image)
         np.save(self.labelpathes[idx],label)
-        # 存频率谱
+
         # amp=extract_amp_spectrum(image)
         # print('amp',amp.shape)
         # np.save(self.freqpathes[idx],amp)

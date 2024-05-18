@@ -27,21 +27,20 @@ def divide(client_idx):
 	# data_path = '/mnt/diskB/xxx/Prostate_processed_1024'
 	# image_list = glob('{}/{}/data_npy/*'.format(data_path,client_name[client_idx]))
 	# label_dir='{}/{}/label_npy'.format(data_path,client_name[client_idx])
-	# 源文件夹和目标文件夹的路径
+	# The path to the source and destination folders
 	source_folder = '{}/{}/data_npy'.format(data_path,client_name[client_idx])
 	target_folder = '{}/{}/val_data_npy'.format(data_path,client_name[client_idx])
 	source_label_folder = '{}/{}/label_npy'.format(data_path,client_name[client_idx])
 	target_label_folder = '{}/{}/val_label_npy'.format(data_path,client_name[client_idx])
-	# 创建目标文件夹（如果不存在）
 	if not os.path.exists(target_folder):
 		os.makedirs(target_folder)
 	if not os.path.exists(target_label_folder):
 		os.makedirs(target_label_folder)
 	file_names = os.listdir(source_folder)
-	# 根据文件名中的种类分类文件
+	# Sort files according to the category in the file name
 	niis = {}
 	for file_name in file_names:
-		nii = file_name.split('.')[0]  # 获取文件所属种类
+		nii = file_name.split('.')[0]  # Gets the type of the file
 		if nii not in niis:
 			niis[nii] = []
 		niis[nii].append(file_name)
@@ -50,7 +49,7 @@ def divide(client_idx):
 	# 1/10 of the nii files are randomly selected as validation
 	selected_niis = random.sample(list(niis.keys()), nii_number//10+1)
 	num_images_to_move = 0
-	# 将选定种类的文件移动到目标文件夹
+	# Moves the selected type of file to the destination folder
 	for nii in selected_niis:
 		file_list = niis[nii]
 		for file_name in file_list:
@@ -61,7 +60,7 @@ def divide(client_idx):
 			target_path = os.path.join(target_label_folder, file_name)
 			shutil.move(source_path, target_path)
 			num_images_to_move += 1
-	print(f'成功移动了{num_images_to_move}个图像文件到验证集文件夹。')
+	print(f'Successfully moved {num_images_to_move} image files to validation set folder.')
 random.seed(0)
 for i in range(len(client_name)):
     divide(i)

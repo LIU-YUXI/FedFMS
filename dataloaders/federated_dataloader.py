@@ -13,7 +13,6 @@ from scipy.ndimage.morphology import distance_transform_edt, binary_erosion,\
     generate_binary_structure
 import cv2
 from PIL import Image
-# print("当前路径:", current_path)
 from sam_utils import random_click,show_element
 current_path = os.getcwd()
 class ProstateDataset(Dataset):
@@ -24,15 +23,9 @@ class ProstateDataset(Dataset):
         self.freq_list_clients = []
         if split=='train':
             data_path = data_path if data_path is not None else '/mnt/diskB/lyx/Prostate_processed_1024'
+            # Reads the file list for image and label
             self.image_list = glob('{}/{}/data_npy/*'.format(data_path,self.client_name[client_idx]))
             self.label_dir='{}/{}/label_npy'.format(data_path,self.client_name[client_idx])
-            '''
-            for i in range(len(self.client_name)):
-                freq_list = glob('{}/{}/freq_amp_npy/*'.format(data_path,self.client_name[i]))
-                length = len(freq_list)
-                freq_list = random.sample(freq_list, int(length/8))
-                self.freq_list_clients.append(freq_list)
-            '''
         self.freq_site_index = freq_site_idx
 
         print("total {} slices".format(len(self.image_list)))
@@ -41,78 +34,17 @@ class ProstateDataset(Dataset):
         return len(self.image_list)
     def __getitem__(self, idx):
         raw_file = self.image_list[idx]
-        
         mask_patches = []
-
         image_patch = np.load(raw_file)
         file_name = os.path.basename(raw_file)
         label_path = os.path.join(self.label_dir,file_name)
         mask_patch = np.load(label_path)
-
-        # mask =  np.squeeze(mask_patch)
-        # print(mask.shape)
-        # newsize = (image_patch.shape[1],image_patch.shape[1])
-        # print(newsize)
-        # 只能(256,256)去resize,不能(256，256，1)
-        # mask=cv2.resize(mask, newsize, interpolation=cv2.INTER_NEAREST)
-        # mask_patch = mask_patch.resize(newsize)
-        # print('mask',mask_patch,mask_patch.size)
-        # inout = 1
-        # point_label = 1
-        # print(list(np.array(mask)))
-        # pt = random_click(np.array(mask), point_label, inout)# np.expand_dims(random_click(np.array(mask), point_label, inout), axis=0)
-        # mask =  np.squeeze(mask_patch)
-        # print('pt',pt.shape)
-        # print('raw_inp',raw_inp.shape,np.transpose(raw_inp,(2,0,1)).shape)
-        # 将numpy数组转换为PIL图像
-        # pil_image = Image.fromarray(np.transpose(raw_inp,(2,0,1)))
-        # print(pil_image.shape)
-        # 重新调整图像大小为 (1024, 1024)
-        # resized_image = pil_image.resize((1024, 1024))
-
-        # 将PIL图像转换回numpy数组
-        # raw_inp = np.transpose(np.array(resized_image),(2,0,1))
-        # print('raw_inp',raw_inp.shape)
-        # image_patch = raw_inp[..., 0:3]
-        # mask_patch = raw_inp[..., 3:]
-        '''
-        # 将图像数据转换为PIL图像对象
-        image_patch = Image.fromarray(image_patch.astype('uint8'))
-        # 调整图像大小为 [1024, 1024, 3]
-        resized_image = image_patch.resize((1024, 1024))
-        # 将PIL图像对象转换为numpy数组
-        image_patch = np.array(resized_image)
-        print(image_patch.size,mask_patch.size)
-        '''
-        # image_patch=cv2.resize(image_patch, (1024,1024), interpolation=cv2.INTER_LINEAR)
-        # mask_patch=cv2.resize(mask_patch, (1024,1024), interpolation=cv2.INTER_NEAREST)
-        # image_patch = self.resize(image_patch,(1024,1024))
-        # mask_patch = self.resize(mask_patch,(1024,1024))
         image_patches = image_patch.copy()
-
-        # image_patches = 
-        # print (image_patch.dtype)
-        # print (mask_patch.dtype)
-        '''
-        disc_contour, disc_bg, cup_contour, cup_bg = _get_coutour_sample(mask_patch)
-        # print ('raw', np.min(image_patch), np.max(image_patch))
-        for tar_freq_domain in np.random.choice(self.freq_site_index, 2):
-            tar_freq = np.random.choice(self.freq_list_clients[tar_freq_domain])
-            tar_freq = np.load(tar_freq).transpose(2, 0, 1)
-            # print('tar_freq',tar_freq.shape)
-            # L1 = random.randint(2,5)/1000.0
-            image_patch_freq_1 = source_to_target_freq(image_patch, tar_freq[...], L=0)
-            image_patch_freq_1 = np.clip(image_patch_freq_1, 0, 255)
-            # print (image_patch_freq_1.dtype)
-            # print ('trans', np.min(image_patch_freq_1), np.max(image_patch_freq_1))
-            image_patches = np.concatenate([image_patches,image_patch_freq_1], axis=-1)
-        '''
+        # prompt is cancelled, so pt is set to 0
         pt=np.array([0,0])
         image_patches = image_patches.transpose(2, 0, 1)
         mask_patches = mask_patch.transpose(2, 0, 1)
-        # contour_bg_mask = np.concatenate(contour_bg_mask, axis=-1)
         sample = {"image": image_patches.astype(np.float32)/ 255.0, "label": mask_patches.astype(np.float32), "pt":pt}
-        
         return sample
 class Dataset(Dataset):
     """ LA Dataset """
@@ -121,16 +53,10 @@ class Dataset(Dataset):
         self.client_name = ['1', '4', '5', '6', '13', '16', '18', '20', '21'] if client_name is None else client_name 
         self.freq_list_clients = []
         if split=='train':
+            # Reads the file list for image and label
             data_path = data_path if data_path is not None else '/mnt/diskB/lyx/FeTS2022_FedDG_1024'
             self.image_list = glob('{}/{}/data_npy/*'.format(data_path,self.client_name[client_idx]))
             self.label_dir='{}/{}/label_npy'.format(data_path,self.client_name[client_idx])
-            '''
-            for i in range(len(self.client_name)):
-                freq_list = glob('{}/{}/freq_amp_npy/*'.format(data_path,self.client_name[i]))
-                length = len(freq_list)
-                freq_list = random.sample(freq_list, int(length/8))
-                self.freq_list_clients.append(freq_list)
-            '''
         self.freq_site_index = freq_site_idx
         self.client_idx=client_idx
         print("total {} slices".format(len(self.image_list)))
@@ -146,119 +72,15 @@ class Dataset(Dataset):
         file_name = os.path.basename(raw_file)
         label_path = os.path.join(self.label_dir,file_name)
         mask_patch = np.load(label_path)
-        
-        # mask =  np.squeeze(mask_patch)
-        # print(mask.shape)
-        # newsize = (image_patch.shape[1],image_patch.shape[1])
-        # print(newsize)
-        # new_mask=[]
-        # for i in range(mask.shape[-1]):
-        #    new_mask.append(np.array(cv2.resize(mask, newsize, interpolation=cv2.INTER_NEAREST)))
-        # mask = mask_patch[:,:,0]
-        # save mask
-        '''
-        mask_show= mask.copy()
-        mask_show[mask_show==1]=255
-        image = Image.fromarray(mask_show)
-        image.save("../output/output-{}.jpg".format(self.client_name[self.client_idx]))
-        '''
-        # mask=cv2.resize(mask, newsize, interpolation=cv2.INTER_NEAREST)
-        # mask_patch = mask_patch.resize(newsize)
-        # print('mask',mask_patch.size)
-        # inout = 1
-        # point_label = 1
-        # print(list(np.array(mask)))
-        # pt = random_click(np.array(mask), point_label, inout)# np.expand_dims(random_click(np.array(mask), point_label, inout), axis=0)
-        # print('pt',pt)
-        # print('raw_inp',raw_inp.shape,np.transpose(raw_inp,(2,0,1)).shape)
-        # 将numpy数组转换为PIL图像
-        # pil_image = Image.fromarray(np.transpose(raw_inp,(2,0,1)))
-        # print(pil_image.shape)
-        # 重新调整图像大小为 (1024, 1024)
-        # resized_image = pil_image.resize((1024, 1024))
-
-        # 将PIL图像转换回numpy数组
-        # raw_inp = np.transpose(np.array(resized_image),(2,0,1))
-        # print('raw_inp',raw_inp.shape)
-        # image_patch = raw_inp[..., 0:3]
-        # mask_patch = raw_inp[..., 3:]
-        '''
-        # 将图像数据转换为PIL图像对象
-        image_patch = Image.fromarray(image_patch.astype('uint8'))
-        # 调整图像大小为 [1024, 1024, 3]
-        resized_image = image_patch.resize((1024, 1024))
-        # 将PIL图像对象转换为numpy数组
-        image_patch = np.array(resized_image)
-        print(image_patch.size,mask_patch.size)
-        '''
-        # image_patch=cv2.resize(image_patch, (1024,1024), interpolation=cv2.INTER_LINEAR)
-        # mask_patch=cv2.resize(mask_patch, (1024,1024), interpolation=cv2.INTER_NEAREST)
-        # image_patch = self.resize(image_patch,(1024,1024))
-        # mask_patch = self.resize(mask_patch,(1024,1024))
         image_patches = image_patch.copy()
-
-        # image_patches = 
-        # print (image_patch.dtype)
-        # print (mask_patch.dtype)
-        '''
-        disc_contour, disc_bg, cup_contour, cup_bg = _get_coutour_sample(mask_patch)
-        # print ('raw', np.min(image_patch), np.max(image_patch))
-        for tar_freq_domain in np.random.choice(self.freq_site_index, 2):
-            tar_freq = np.random.choice(self.freq_list_clients[tar_freq_domain])
-            tar_freq = np.load(tar_freq).transpose(2, 0, 1)
-            # print('tar_freq',tar_freq.shape)
-            # L1 = random.randint(2,5)/1000.0
-            image_patch_freq_1 = source_to_target_freq(image_patch, tar_freq[...], L=0)
-            image_patch_freq_1 = np.clip(image_patch_freq_1, 0, 255)
-            # print (image_patch_freq_1.dtype)
-            # print ('trans', np.min(image_patch_freq_1), np.max(image_patch_freq_1))
-            image_patches = np.concatenate([image_patches,image_patch_freq_1], axis=-1)
-        '''
         pt=np.array([0,0])
         image_patches = image_patches.transpose(2, 0, 1)
         mask_patches = mask_patch.transpose(2, 0, 1)
-        # show_element(mask_patches)
-        # print(mask_patches.shape,image_patches.shape)
-        # contour_bg_mask = np.concatenate(contour_bg_mask, axis=-1)
         sample = {"image": image_patches.astype(np.float32)/ 255.0, "label": mask_patches.astype(np.float32), "pt":pt}
-        
         return sample
 
 
-class FeTSDataset(Dataset):
-    """ LA Dataset """
-    def __init__(self,data_path=None, client_idx=None, freq_site_idx=None, split='train', transform=None, client_name=None):
-        self.transform = transform
-        self.client_name = ['1', '4', '5', '6', '13', '16', '18', '20', '21'] if client_name is None else client_name 
-        self.freq_list_clients = []
-        if split=='train':
-            data_path = data_path if data_path is not None else '/mnt/diskB/lyx/FeTS2022_FedDG_1024_npy'
-            self.image_list = np.load('{}/{}/images.npy'.format(data_path,self.client_name[client_idx]))
-            self.label_list = np.load('{}/{}/labels.npy'.format(data_path,self.client_name[client_idx]))
-            self.pt_list = np.load('{}/{}/pts.npy'.format(data_path,self.client_name[client_idx]))
-            '''
-            for i in range(len(self.client_name)):
-                freq_list = glob('{}/{}/freq_amp_npy/*'.format(data_path,self.client_name[i]))
-                length = len(freq_list)
-                freq_list = random.sample(freq_list, int(length/8))
-                self.freq_list_clients.append(freq_list)
-            '''
-        self.freq_site_index = freq_site_idx
-        self.client_idx=client_idx
-        print("total {} slices".format(len(self.image_list)))
-
-    def __len__(self):
-        return len(self.image_list)
-    def __getitem__(self, idx):
-        image_patches = self.image_list[idx]
-        mask_patches = self.label_list[idx]
-        pt=self.pt_list[idx]
-        # show_element(mask_patches)
-        # print(mask_patches.shape,image_patches.shape)
-        # contour_bg_mask = np.concatenate(contour_bg_mask, axis=-1)
-        sample = {"image": image_patches.astype(np.float32)/ 255.0, "label": mask_patches.astype(np.float32), "pt":pt}
-        
-        return sample
+# The following are data-enhanced functions that will work in the future and not be used for the time being
 
 def _get_coutour_sample(y_true):
     disc_mask = np.expand_dims(y_true[..., 0], axis=2)

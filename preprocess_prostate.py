@@ -9,7 +9,6 @@ data_path = '/mnt/diskB/name/Prostate_processed/'
 target_path = '/mnt/diskB/name/Prostate_processed_1024'
 if not os.path.exists(target_path):
     os.makedirs(target_path)
-# 还要生成test数据
 client_data_list = []
 slice_num =[]
 def convert_from_nii_to_png(img):
@@ -33,15 +32,12 @@ for client_idx in range(client_num):
     if not os.path.exists(label_dir_name):
         os.makedirs(label_dir_name)
     for fid, filename in enumerate(client_data_list[client_idx]):
-        # 读取.nii.gz文件
+        # read .nii.gz file
         nii_file_path = filename# '/mnt/diskB/name/Prostate_processed/Prostate_processed/BIDMC/images/Case02.nii.gz'
         img = nib.load(nii_file_path)
-        # 获取图像数据
         img_data = img.get_fdata()
         lab = nib.load(nii_file_path.replace('images','labels'))
         label_data = lab.get_fdata()
-        # 打印图像数据的形状
-        # print("图像数据形状:", img_data.shape,label_data.shape)
         image_file_name = os.path.basename(filename)
         img_data = convert_from_nii_to_png(img_data)
         for i in range(img_data.shape[-1]):

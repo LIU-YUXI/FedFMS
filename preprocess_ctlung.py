@@ -12,7 +12,6 @@ data_path = '/mnt/diskB/name/CTLung'
 target_path = '/mnt/diskB/name/CTLung_1024'
 if not os.path.exists(target_path):
     os.makedirs(target_path)
-# 还要生成test数据
 client_data_list = []
 slice_num =[]
 for client_idx in range(client_num):
@@ -31,8 +30,6 @@ for client_idx in range(client_num):
         img_data = np.array(Image.open(filename))
         labelname = filename.replace('images','masks')
         label_data = np.array(Image.open(labelname))
-        # 打印图像数据的形状
-        # print("图像数据形状:", img_data.shape,label_data.shape)
         image_file_name = os.path.basename(filename)
         rgb_image=cv2.resize(img_data, (1024,1024), interpolation=cv2.INTER_LINEAR)
         rgb_image = cv2.cvtColor(rgb_image, cv2.COLOR_GRAY2RGB)

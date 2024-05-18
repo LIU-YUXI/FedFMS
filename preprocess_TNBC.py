@@ -1,34 +1,5 @@
 import os
 import shutil
-'''
-# 源文件夹路径
-source_folder = '/mnt/diskB/name/TNBC_NucleiSegmentation'
-
-# 目标文件夹路径
-target_folder_slide = '/mnt/diskB/name/TNBC/images'
-target_folder_gt = '/mnt/diskB/name/TNBC/labels'
-if not os.path.exists(target_folder_slide):
-    os.makedirs(target_folder_slide)
-if not os.path.exists(target_folder_gt):
-    os.makedirs(target_folder_gt)
-# 遍历源文件夹下的子文件夹
-for subfolder in os.listdir(source_folder):
-    subfolder_path = os.path.join(source_folder, subfolder)
-    
-    # 如果是 Slide 开头的文件夹，将其中的文件移动到 Slide 目标文件夹
-    if subfolder.startswith('Slide'):
-        for filename in os.listdir(subfolder_path):
-            source_file_path = os.path.join(subfolder_path, filename)
-            target_file_path = os.path.join(target_folder_slide, filename)
-            shutil.move(source_file_path, target_file_path)
-    
-    # 如果是 GT 开头的文件夹，将其中的文件移动到 GT 目标文件夹
-    elif subfolder.startswith('GT'):
-        for filename in os.listdir(subfolder_path):
-            source_file_path = os.path.join(subfolder_path, filename)
-            target_file_path = os.path.join(target_folder_gt, filename)
-            shutil.move(source_file_path, target_file_path)
-'''
 import numpy  as np 
 import cv2
 import os
@@ -51,8 +22,6 @@ for fid, filename in enumerate(client_data_list):
     img_data = np.array(Image.open(filename))
     labelname = filename.replace('images','labels')
     label_data = np.array(Image.open(labelname))
-    # 打印图像数据的形状
-    # print("图像数据形状:", img_data.shape,label_data.shape)
     image_file_name = os.path.basename(filename)
     rgb_image=cv2.resize(img_data, (1024,1024), interpolation=cv2.INTER_LINEAR)
     image_new_name = image_file_name+'.npy'

@@ -110,16 +110,15 @@ device = torch.device('cuda', int(args.gpu))
 # optimizerD = optim.Adam(netD.parameters(), lr=dis_lr, betas=(beta1, 0.999))
 '''end'''
 def show_element(print_image):
-    # 找到不为零的元素的索引
     non_zero_indices = np.nonzero(print_image)        
-    # 打印不为零的元素及其索引
+    # Prints non-zero elements and their indexes
     for i in range(len(non_zero_indices[0])):
         row = non_zero_indices[0][i]
         col = non_zero_indices[1][i]
         row2 = non_zero_indices[2][i]
         # col2 = non_zero_indices[3][i]
         value = print_image[row, col,row2]
-        print(f"元素 {value} 在索引 ({row}, {col})")
+        print(f"value {value} is in index ({row}, {col})")
 def get_network(args, net, use_gpu=True, gpu_device = 0, distribution = True):
     """ return given network
     """

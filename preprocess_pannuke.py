@@ -24,8 +24,6 @@ for fid in range(file_number):
         os.makedirs(dir_name)
     if not os.path.exists(label_dir_name):
         os.makedirs(label_dir_name)
-    # 打印图像数据的形状
-    # print("图像数据形状:", img_data.shape,label_data.shape)
     image_file_name = types[fid]+str(fid)
     rgb_image=cv2.resize(img_data, (1024,1024), interpolation=cv2.INTER_LINEAR)
     image_new_name = image_file_name+'.npy'

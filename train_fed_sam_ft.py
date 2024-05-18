@@ -1,5 +1,5 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(map(str, [0,1,2,3,4,5,6,7])) # 一般在程序开头设置
+os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(map(str, [0,1,2,3,4,5,6,7]))
 import sys
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
@@ -34,25 +34,6 @@ from sam_utils import *
 # net = sam_model_registry['vit_b'](args,checkpoint=args.sam_ckpt).to(device)
 import copy
 from PIL import Image, ImageDraw
-'''
-parser = argparse.ArgumentParser()
-parser.add_argument('--exp', type=str,  default='xxxx', help='model_name')
-parser.add_argument('--max_epoch', type=int,  default=100, help='maximum epoch number to train')
-parser.add_argument('--client_num', type=int, default=9, help='batch_size per gpu')
-parser.add_argument('--batch_size', type=int, default=10, help='batch_size per gpu')
-parser.add_argument('--image_size', type=int, default=1024, help='image_size')
-parser.add_argument('--clip_value', type=float,  default=100, help='maximum epoch number to train')
-parser.add_argument('--meta_step_size', type=float,  default=1e-3, help='maximum epoch number to train')
-parser.add_argument('--base_lr', type=float,  default=0.001, help='maximum epoch number to train')
-parser.add_argument('--deterministic', type=int,  default=1, help='whether use deterministic training')
-parser.add_argument('--seed', type=int,  default=1337, help='random seed')
-parser.add_argument('--gpu', type=str,  default='0', help='GPU to use')
-parser.add_argument('--display_freq', type=int, default=5, help='batch_size per gpu')
-parser.add_argument('--unseen_site', type=int, default=8, help='batch_size per gpu')
-parser.add_argument('--pretrain', type=str, default=None, help='pretrain model')
-parser.add_argument('--sam_ckpt', type=str, default=None, help='pretrain Sam model')
-args = parser.parse_args()
-'''
 import cfg
 args = cfg.parse_args()
 snapshot_path = "../output/" + args.exp + "/"
@@ -63,25 +44,16 @@ base_lr = args.base_lr
 # client_num = args.client_num
 max_epoch = args.max_epoch
 display_freq = args.display_freq
-# ？？？
-# client_name = ['1', '4', '5', '6', '13', '16', '18', '20', '21']
+# client names and paths for different federated learning datasets
 client_name = ['1', '6', '18', '21']
 data_path = '/mnt/diskB/xxx/FeTS2022_FedDG_1024'
 if args.data=='Prostate':
     client_name =  ['BIDMC', 'HK', 'I2CVB', 'ISBI', 'ISBI_1.5', 'UCL']
     data_path = '/mnt/diskB/xxx/Prostate_processed_1024'
 elif args.data=='Fundus':
-    # client_name =  ['G1020', 'ORIGA', 'REFUGE','Drishti-GS1']# ,'RIM-ONE'
     client_name =  ['REFUGE', 'ORIGA','G1020','Drishti-GS1']# ,'RIM-ONE',
-    # client_name =  ['RIM-ONE','Drishti-GS1']# ,
-    # Drishti不是1,'RIM-ONE'也不是
     data_path = '/mnt/diskB/xxx/Fundus_1024'
 elif args.data=='Nuclei':
-    # client_name = ['MoNuSAC2018','PanNuke2','PanNuke3','TNBC','MoNuSAC2020']
-    #client_name = ['TNBC','MoNuSAC2018','MoNuSAC2020']# ,'PanNuke3','PanNuke2'
-    # client_name = ['PanNuke3Breast', 'PanNuke3Testis', 'PanNuke3Kidney', 'PanNuke3Bile-duct', 'PanNuke3Lung', 'PanNuke3Skin', 'PanNuke3Stomach',  'PanNuke3HeadNeck', 'PanNuke3Liver', 'PanNuke3Pancreatic', 'PanNuke3Ovarian', 'PanNuke3Esophagus', 'PanNuke3Bladder', 'PanNuke3Thyroid', 'PanNuke3Uterus', 'PanNuke3Colon', 'PanNuke3Prostate', 'PanNuke3Adrenal_gland','PanNuke3Cervix']
-    # client_name = ['PanNuke2Adrenal_gland','PanNuke2Esophagus', 'PanNuke3Testis', 'PanNuke3Kidney', 'PanNuke2Thyroid','PanNuke2Liver','PanNuke3Skin','PanNuke3Uterus','MoNuSAC2020','TNBC','MoNuSAC2018']
-    # client_name = ['PanNuke2Adrenal_gland','PanNuke2Esophagus', 'PanNuke3Testis', 'PanNuke3Kidney', 'MoNuSAC2020','TNBC','MoNuSAC2018']
     client_name = ['PanNuke2Adrenal_gland','PanNuke2Esophagus', 'PanNuke3Bile-duct','PanNuke3Uterus', 'MoNuSAC2020','TNBC','MoNuSAC2018']
     data_path = '/mnt/diskB/xxx/Nuclei_1024'
 elif args.data=='CTLung':
@@ -90,7 +62,6 @@ elif args.data=='CTLung':
 elif args.data=='Liver':
     client_name = ['1', '2', '3', '4', '5']
     data_path = '/mnt/diskB/xxx/Liver2000_1024'
-# 还要生成test数据
 client_num = len(client_name)
 client_data_list = []
 client_val_data_list = []
@@ -125,51 +96,17 @@ if args.deterministic:
     torch.cuda.manual_seed(args.seed)
 print(torch.__version__)
 print(torch.cuda.is_available())
-if torch.cuda.is_available():
-    # 获取可用的 CUDA 设备数量
-    num_devices = torch.cuda.device_count()
-    print(f"可用的 CUDA 设备数量: {num_devices}")
 
-    # 遍历输出每个设备的名称
-    for i in range(num_devices):
-        device_name = torch.cuda.get_device_name(i)
-        print(f"CUDA 设备 {i}: {device_name}")
-else:
-    print("没有可用的 CUDA 设备")
-# 一样的模型
+# The global model is obtained by weighted aggregation of data volume
 def update_global_model(net_clients, client_weight):
-    # client_num=4
-    # Use the true average until the exponential average is more correct
     for param in zip(*list(net_clients[i].parameters() for i in range(client_num))):
-    #for param in zip(net_clients[0].parameters(), net_clients[1].parameters(), 
-    #                 net_clients[2].parameters(), net_clients[3].parameters()):
-        # print(param,param[0])
         new_para = Variable(torch.Tensor(np.zeros(param[0].shape)), requires_grad=False).cuda(GPUdevice) 
         for i in range(client_num):
             new_para.data.add_(client_weight[i], param[i].data)
 
         for i in range(client_num):
             param[i].data.mul_(0).add_(new_para.data)
-# 为什么要求平均值？
-def extract_contour_embedding(contour_list, embeddings):
 
-    average_embeddings_list = []
-    for contour in contour_list:
-        # print('contour.shape,embeddings.shape',contour.shape,embeddings.shape)
-        contour_embeddings = contour * embeddings
-        average_embeddings = torch.sum(contour_embeddings, (-1,-2))/(torch.sum(contour, (-1,-2))+1e-8)
-        # print (1,contour.shape)
-        # print (2,embeddings.shape)
-        # print (3,contour_embeddings.shape)
-        # print (4,average_embeddings.shape)
-        '''
-        1 torch.Size([5, 1, 384, 384])
-        2 torch.Size([5, 32, 384, 384])
-        3 torch.Size([5, 32, 384, 384])
-        4 torch.Size([5, 32])
-        '''
-        average_embeddings_list.append(average_embeddings)
-    return average_embeddings_list
 def val(site_index, test_net):
     val_data_list = client_val_data_list[site_index]
     dice_array = []
@@ -242,7 +179,7 @@ def val(site_index, test_net):
         eiou_avg = np.mean(eiou_array, axis=0).tolist()
         logging.info("validate data from client %d OD dice_avg %.4f, Eiou %.4f" % (site_index, dice_avg, eiou_avg))
         return dice_avg,eiou_avg
-
+# Validation is performed on the validation set of each client
 def validation(test_net):
     dice_avg, eiou_avg, dice_avg_cup, eiou_avg_cup =[], [], [], []
     for i in source_site_idx:
@@ -275,22 +212,8 @@ def save_image(mask_data,name='pred'):
     mask_show=mask_show*255
     image_save = Image.fromarray(mask_show).convert("RGB")
     image_save.save("../output/output-fundus-cup-{}.jpg".format(name))
-def draw_result(image,mask):
-
-    # 假设 mask 是一个 (256, 256) 的 NumPy 数组
-    # mask = np.random.randint(0, 2, size=(256, 256))
-
-    # 将 mask 调整为 (1024, 1024)
-    resized_mask = np.array(Image.fromarray(mask).resize((1024, 1024), Image.NEAREST))
-
-    # 在 image 上绘制轮廓线
-    # image = np.random.randint(0, 255, size=(1024, 1024, 3), dtype=np.uint8)  # 假设 image 是一个 (1024, 1024, 3) 的 NumPy 数组
-    contours, _ = cv2.findContours(resized_mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    image_with_contours = cv2.drawContours(image.copy(), contours, -1, (0, 255, 0), 2)
-
-    # 保存绘制了轮廓线的图像
-    cv2.imwrite('./output/funduscontours_image.jpg', image_with_contours)
-
+    
+# Test the data on unseensite using the aggregated global model
 def test(site_index, test_net):
 
     test_data_list = client_data_list[site_index]
@@ -308,12 +231,10 @@ def test(site_index, test_net):
         data = np.load(filename)/ 255.0
         # print('data',data)
         mask_data = np.load(filename.replace("data", "label"))
-        # why expand_dims?
         image = np.expand_dims(data[..., :3].transpose(2, 0, 1), axis=0)
         mask = np.expand_dims(mask_data.transpose(2, 0, 1), axis=0)
         # show_element(mask)
         # print('mask_data.shape,mask.shape',mask_data.shape,mask.shape)
-        # mask在另外一个地方文件夹。。。
         image = torch.from_numpy(image).float()
         mask = torch.from_numpy(mask)
         '''
@@ -358,22 +279,6 @@ def test(site_index, test_net):
         threshold = (0.1, 0.3, 0.5, 0.7, 0.9)
         
         temp = eval_seg(pred, mask, threshold)
-        '''
-        eiou, edice = temp
-        dice_array.append(edice)
-        eiou_array.append(eiou)
-        
-    dice_array = np.array(dice_array)
-    eiou_array = np.array(eiou_array)
-    # print (dice_array.shape)
-    dice_avg = np.mean(dice_array, axis=0).tolist()
-    eiou_avg = np.mean(eiou_array, axis=0).tolist()
-    # print (dice_avg)
-    # haus_avg = np.mean(haus_array, axis=0).tolist()[0]
-    # logging.info("OD dice_avg %.4f OC dice_avg %.4f" % (dice_avg[0], dice_avg[1]))
-    logging.info("OD dice_avg %.4f, Eiou %.4f" % (dice_avg, eiou_avg))
-    return dice_avg, dice_array, eiou_avg, eiou_array
-        '''
         if(pred.shape[1]==2):
             iou_d, iou_c, disc_dice, cup_dice= temp
             dice_array.append(disc_dice)
@@ -408,9 +313,9 @@ def test(site_index, test_net):
 
 
 def copy_outer_net(fast_weights,net_current):
-    # 深拷贝net_current模型
+    # Deep copy the net current model
     net_copy = copy.deepcopy(net_current)
-    # 将fast_weights中的权重赋值给net_copy模型
+    # Assign the fast weights to the net copy model
     for name, param in net_copy.named_parameters():
         if name in fast_weights:
             param.data = fast_weights[name]
@@ -432,6 +337,7 @@ if __name__ == "__main__":
     logging.info(str(args))
     GPUdevice = torch.device('cuda', int(args.gpu))
     pos_weight = torch.ones([1]).cuda(device=GPUdevice)*2
+    # loss function is BCELoss
     criterion_G = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     lossfunc = criterion_G
     # define dataset, model, optimizer for each client
@@ -484,13 +390,6 @@ if __name__ == "__main__":
         dataloader_clients.append(dataloader)
         net_clients.append(net)
         optimizer_clients.append(optimizer)
-    '''
-    for name, param in  net_clients[0].named_parameters():
-        print (name)
-    '''
-
-    temperature = 0.05
-    cont_loss_func = losses.NTXentLoss(temperature)
 
     # start federated learning
     writer = SummaryWriter(snapshot_path+'/log')
@@ -515,6 +414,7 @@ if __name__ == "__main__":
                 volume_batch, label_batch, pt = sampled_batch['image'], sampled_batch['label'], sampled_batch['pt']
                 volume_batch_raw_np = volume_batch[:, :3, ...]
                 point_labels = torch.ones(volume_batch.size(0))
+                # If no pt is provided in the dataset, pt is generated. But we canceled prompt, so this pt doesn't make sense
                 if point_labels[0] != -1:
                     # point_coords = samtrans.ResizeLongestSide(longsize).apply_coords(pt, (h, w))
                     point_coords = pt
@@ -535,8 +435,9 @@ if __name__ == "__main__":
                 # print('parameters_name',net_current.image_encoder.named_parameters())
                 parameters_to_calculate_grad = []
                 parameters_name_to_calculate_grad = []
-                # batch_size, out_chans=256, H', W', 感觉out_chans可以小一点
+                # Input an image to an encoder and get the output from the encoder
                 volume_batch_raw_encoded= net_current.image_encoder(volume_batch_raw)
+                # Input the result of the encoder into the decoder to get the segmented result mask, i.e., outputs_soft_inner
                 outputs_soft_inner, masks_inner_embedding, _ = net_current.mask_decoder(
                     image_embeddings=volume_batch_raw_encoded,
                     image_pe=net.prompt_encoder.get_dense_pe(), #  1x(embed_dim)x(embedding_h)x(embedding_w)
@@ -546,6 +447,7 @@ if __name__ == "__main__":
                 )
                 # print("outputs_soft_inner.shape,label_batch.shape",outputs_soft_inner.shape,label_batch.shape)
                 # loss_inner = F.binary_cross_entropy_with_logits(outputs_soft_inner, label_batch)
+                # Calculate the BCE loss
                 loss_inner = lossfunc(outputs_soft_inner, label_batch) #dice
                 # loss_inner = dice_loss(outputs_soft_inner, label_batch)
                 total_loss = loss_inner
@@ -563,37 +465,6 @@ if __name__ == "__main__":
                     writer.add_scalar('loss/total', total_loss, iter_num)
                     logging.info('Epoch: [%d] client [%d] iteration [%d / %d] : inner loss : %f' % \
                         (epoch_num, client_idx, iter_num, len(dataloader_current), loss_inner.item()))
-                    '''
-                    logging.info('Epoch: [%d] client [%d] iteration [%d / %d] : inner loss : %f outer dice loss : %f outer cont loss : %f outer loss : %f total loss : %f' % \
-                        (epoch_num, client_idx, iter_num, len(dataloader_current), loss_inner.item(), loss_outer_1_dice.item(), cont_loss.item(), loss_outer.item(), total_loss.item()))
-                    '''
-                    
-                '''
-                if iter_num % 20 == 0:
-                    image = np.array(volume_batch_raw_np[0, 0:3, :, :], dtype='uint8')
-                    writer.add_image('train/RawImage', image, iter_num)
-
-                    image = np.array(volume_batch_trs_1_np[0, 0:3, :, :], dtype='uint8')
-                    writer.add_image('train/TrsImage', image, iter_num)
-
-                    image = outputs_soft_inner[0, 0:1, ...].data.cpu().numpy()
-                    writer.add_image('train/RawDiskMask', image, iter_num)
-                    # image = outputs_soft_inner[0, 1:, ...].data.cpu().numpy()
-                    # writer.add_image('train/RawCupMask', image, iter_num)
-
-
-                    image = np.array(disc_contour[0, 0:1, :, :].data.cpu().numpy())#, dtype='uint8')
-                    writer.add_image('train/disc_contour', image, iter_num)
-
-                    image = np.array(disc_bg[0, 0:1, :, :].data.cpu().numpy())#, dtype='uint8')
-                    writer.add_image('train/disc_bg', image, iter_num)
-
-                    # image = np.array(cup_contour[0, 0:1, :, :].data.cpu().numpy())#, dtype='uint8')
-                    # writer.add_image('train/cup_contour', image, iter_num)
-
-                    # image = np.array(cup_bg[0, 0:1, :, :].data.cpu().numpy())#, dtype='uint8')
-                    # writer.add_image('train/cup_bg', image, iter_num)
-                '''
                 if iter_num % 10000==0:
                     val(client_idx,net_current)
                     # break
