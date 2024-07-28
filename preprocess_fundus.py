@@ -4,8 +4,7 @@ import numpy  as np
 import cv2
 import os
 from PIL import Image
-# client_name = ['RIM-ONE','G1020', 'ORIGA', 'REFUGE','Drishti-GS1']
-client_name = ['Drishti-GS1']
+client_name = ['G1020', 'ORIGA', 'REFUGE', 'Drishti-GS1']
 client_num = len(client_name)
 data_path = '/mnt/diskB/name/Fundus'
 target_path = '/mnt/diskB/name/Fundus_1024'
@@ -21,7 +20,7 @@ def show_element(print_image):
         # row2 = non_zero_indices[2][i]
         # col2 = non_zero_indices[3][i]
         value = print_image[row, col]
-        print(f "value {value} is in index ({row}, {col})")
+        print(f"value {value} is in index ({row}, {col})")
         
 for client_idx in range(client_num):
     # print('{}/{}/data_npy/*'.format(data_path,client_name[client_idx]))
