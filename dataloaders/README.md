@@ -19,5 +19,4 @@
 下载链接：
 part1链接：https://pan.baidu.com/s/1VCbLT2vturnL5NWCojojYQ?pwd=99ns 提取码：99ns
 part2链接：https://pan.baidu.com/s/1FIZKa9fIjqAHE0B96P5CUg?pwd=z0qy 提取码：z0qy
-直接使用，不用预处理。把两个分开压缩的压缩包中的子文件夹放到同一目录下。（即Nuclei_1024文件夹下放'PanNuke2Adrenal_gland','PanNuke2Esophagus', 'PanNuke3Bile-duct','PanNuke3Uterus', 'MoNuSAC2020','TNBC','MoNuSAC2018'七个文件夹）
-划分代码：divide_val.py
+直接使用，不用预处理和划分。把两个分开压缩的压缩包中的子文件夹放到同一目录下。（即Nuclei_1024文件夹下放'PanNuke2Adrenal_gland','PanNuke2Esophagus', 'PanNuke3Bile-duct','PanNuke3Uterus', 'MoNuSAC2020','TNBC','MoNuSAC2018'七个文件夹）
